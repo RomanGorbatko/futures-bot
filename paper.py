@@ -279,6 +279,8 @@ def handle_socket_message(event):
         'high', 'low', 'volume', 'number_of_trades', 'is_closed', 'quote_asset_volume', 'taker_buy_volume',
         'taker_buy_quote_asset_volume', 'ignore'
     ], axis=1, copy=False)
+    event_df.drop('interval', axis=1, inplace=True)
+    event_df.astype(float)
 
     df_data = df.iloc[-1]
     event_data = event_df.iloc[0]
