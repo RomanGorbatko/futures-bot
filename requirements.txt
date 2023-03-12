@@ -1,0 +1,4 @@
+python-binance==1.0.15
+pandas==1.5.3
+prettytable==3.6.0
+pandas-ta===0.3.14b0

@@ -1,0 +1,334 @@
+import threading
+import time
+from datetime import datetime, timedelta
+import random
+import os.path
+
+import pandas as pd
+from pandas_ta import ema, rsi, psar
+from binance.client import Client
+from binance import ThreadedWebsocketManager
+from prettytable import PrettyTable
+
+os.environ['TZ'] = 'ETC'
+
+client = Client()
+
+OPEN_LONG = 'open_long'
+OPEN_SHORT = 'open_short'
+INCREASE_LONG = 'increase_long'
+INCREASE_SHORT = 'increase_short'
+
+TREND_UP = 1
+TREND_DOWN = -1
+NO_TREND = 0
+
+balance = starting_balance = 500  # загальна сума в USDT на фьючах
+risk_per_trade = .2  # відсоток (5%) від balance доступний для трейду
+
+leverage = 20
+stop_loss = .0001  # 0.5%
+take_profit = .03  # 3%
+trailing_stop_loss = .01  # 0.5%
+trailing_take_profit = .02  # 0.5%
+max_trailing_take_profit = 3
+touches = 0
+
+ema_length = 300
+ema_amplitude = 2.5
+
+rsi_length = 13
+rsi_long_reason = 70
+rsi_short_reason = 30
+
+long_position = False
+short_position = False
+entry_price = 0
+stop_loss_price = 0
+take_profit_price = 0
+asset_size = 0
+position = 0
+last_action = None
+trades = 0
+last_orders = []
+trend = 0
+
+wins = 0
+loses = 0
+trailing_loses = 0
+
+symbol = 'APTUSDT'
+interval = Client.KLINE_INTERVAL_1MINUTE
+start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
+end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
+
+
+def get_percentage_difference(num_a, num_b):
+    diff = num_a.astype('float') - num_b.astype('float')
+    divided = diff / num_a.astype('float')
+
+    return divided * 100
+
+
+def calculate_medium_order_entry():
+    return sum(item['entry_price'] for item in last_orders) / len(last_orders)
+
+
+def calculate_entry_position_size():
+    return ((balance * risk_per_trade) * leverage) * (touches + 1)
+
+
+def calculate_pnl(price, reverse=False):
+    rate = (price / entry_price) if reverse is False else (entry_price / price)
+
+    return (rate * calculate_entry_position_size()) - calculate_entry_position_size()
+
+
+def get_dataframe(s, i, st, et):
+    local_df = pd.DataFrame(
+        client.futures_historical_klines(symbol=s, interval=i, start_str=st, end_str=et),
+        columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume',
+                 'trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore']
+    )
+
+    local_df = local_df.astype(float)
+    local_df['timestamp'] = pd.to_datetime(local_df['timestamp'], unit='ms')
+    local_df.set_index('timestamp', inplace=True)
+
+    return local_df
+
+
+def fix_dataframe_index():
+    df["ema"] = ema(df["close"], length=ema_length)
+    df["rsi"] = rsi(df["close"], length=rsi_length)
+    df["ema_amplitude"] = get_percentage_difference(df["close"], df["ema"])
+
+
+def process(df_data, event_data):
+    global balance, trend, long_position, stop_loss_price, take_profit_price, touches, trailing_loses, loses, wins, \
+        last_orders, entry_price, short_position, position, last_action, trades
+
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+
+    if pd.isna(df_data.ema):
+        return
+
+    if balance <= 0:
+        print(f"Time: {current_time}, LIQUIDATION! Balance: {balance:.5f}")
+        twm.stop()
+        return
+
+    last_price = df_data.close
+    last_sma = df_data.ema
+
+    if last_price > last_sma:
+        trend = TREND_UP
+    elif last_price < last_sma:
+        trend = TREND_DOWN
+    else:
+        trend = NO_TREND
+
+    # reason to long exit
+    if long_position and (event_data.close <= stop_loss_price or event_data.close >= take_profit_price):
+        exit_price = stop_loss_price if event_data.close <= stop_loss_price else take_profit_price
+        pnl = calculate_pnl(exit_price)
+
+        if pnl < 0:
+            long_position = False
+
+            if touches > 1:
+                trailing_loses += 1
+            else:
+                loses += 1
+
+            touches = 0
+
+            balance += pnl
+        else:
+            if touches <= max_trailing_take_profit:
+                last_orders.append(
+                    {
+                        'entry_price': event_data.close,
+                        'last_action': INCREASE_LONG
+                    }
+                )
+
+                touches += 1
+                entry_price = calculate_medium_order_entry()
+                stop_loss_price = entry_price * (1 - trailing_stop_loss)
+                take_profit_price = entry_price * (1 + trailing_take_profit)
+
+                print(f'Time: {current_time}, Increase: {touches - 1}, Entry Price: {entry_price:.5f}, '
+                      f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
+
+                return
+            else:
+                touches = 0
+                long_position = False
+                wins += 1
+                balance += pnl
+
+        print(f"Time: {current_time}, Close Long Position; Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
+              f"Exit Price: {exit_price:.5f}, Balance: {balance:.5f}")
+        return
+
+    if short_position and (event_data.close >= stop_loss_price or event_data.close <= take_profit_price):
+        exit_price = stop_loss_price if event_data.close >= stop_loss_price else take_profit_price
+        pnl = calculate_pnl(exit_price, True)
+
+        if pnl < 0:
+            short_position = False
+
+            if touches > 1:
+                trailing_loses += 1
+            else:
+                loses += 1
+
+            touches = 0
+            balance += pnl
+        else:
+            if touches <= max_trailing_take_profit:
+                last_orders.append(
+                    {
+                        'entry_price': event_data.close,
+                        'last_action': INCREASE_SHORT
+                    }
+                )
+
+                touches += 1
+                entry_price = calculate_medium_order_entry()
+
+                stop_loss_price = entry_price * (1 + trailing_stop_loss)
+                take_profit_price = entry_price * (1 - trailing_take_profit)
+
+                print(f'Time: {current_time}, Increase: {touches - 1}, Entry Price: {entry_price:.5f}, '
+                      f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
+
+                return
+            else:
+                touches = 0
+                short_position = False
+                wins += 1
+                balance += pnl
+
+        print(f"Time: {current_time}, Close Short Position; Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
+              f"Exit Price: {exit_price:.5f}, Balance: {balance:.5f}")
+        return
+
+    if not short_position and touches == 0 and trend == TREND_DOWN \
+            and df_data.rsi < rsi_short_reason \
+            and df_data.ema_amplitude < 0 \
+            and abs(df_data.ema_amplitude) > ema_amplitude:
+        entry_price = event_data.close
+        position = calculate_entry_position_size() / entry_price
+        stop_loss_price = entry_price * (1 + stop_loss)
+        take_profit_price = entry_price * (1 - take_profit)
+        short_position = True
+        last_action = OPEN_SHORT
+        touches = 1
+        trades += 1
+        last_orders = []
+        last_orders.append(
+            {
+                'entry_price': entry_price,
+                'last_action': last_action
+            }
+        )
+        print(
+            f"Time: {current_time}, Open Short; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
+            f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}, "
+            f"Balance: {balance:.5f}")
+
+    if not long_position and touches == 0 and trend == TREND_UP \
+            and df_data.rsi > rsi_long_reason \
+            and df_data.ema_amplitude > 0 \
+            and abs(df_data.ema_amplitude) > ema_amplitude:
+        entry_price = event_data.close
+        position = calculate_entry_position_size() / entry_price
+        stop_loss_price = entry_price * (1 - stop_loss)
+        take_profit_price = entry_price * (1 + take_profit)
+        long_position = True
+        last_action = OPEN_LONG
+        touches = 1
+        trades += 1
+        last_orders = []
+        last_orders.append(
+            {
+                'entry_price': entry_price,
+                'last_action': last_action
+            }
+        )
+        print(
+            f"Time: {current_time}, Open Long; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
+            f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}"
+            f", Balance: {balance:.5f}")
+
+
+def handle_socket_message(event):
+    event_df = pd.DataFrame([event['k']])
+    event_df = event_df.set_axis([
+        'kline_start_time', 'kline_close_time', 'interval', 'first_trade_id', 'last_trade_id', 'open', 'close',
+        'high', 'low', 'volume', 'number_of_trades', 'is_closed', 'quote_asset_volume', 'taker_buy_volume',
+        'taker_buy_quote_asset_volume', 'ignore'
+    ], axis=1, copy=False)
+
+    df_data = df.iloc[-1]
+    event_data = event_df.iloc[0]
+
+    process(df_data, event_data)
+
+
+def update_dataframe():
+    global df
+
+    threading.Timer(60, update_dataframe).start()
+
+    previous_minute = (datetime.now() - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
+    current_minute = time.strftime('%Y-%m-%d %H:%M:%S')
+
+    fresh_df = get_dataframe(symbol, interval, previous_minute, current_minute)
+
+    index = fresh_df.first_valid_index()
+    if index in df.index:
+        df.drop(index, inplace=True)
+
+    df = pd.concat([df, fresh_df])
+    fix_dataframe_index()
+
+
+t = PrettyTable(['Param', 'Value'])
+t.add_row(['Start Time', start_time])
+t.add_row(['End Time', end_time])
+t.add_row(['Interval', interval])
+t.add_row(['Risk Per Trade', f"{risk_per_trade * 100}%"])
+t.add_row(['Leverage', leverage])
+t.add_row(['Stop Loss', f"{stop_loss * 100}%"])
+t.add_row(['Take Profit', f"{take_profit * 100}%"])
+t.add_row(['Trailing Stop Loss', f"{trailing_stop_loss * 100}%"])
+t.add_row(['Trailing Take Profit', f"{trailing_take_profit * 100}%"])
+t.add_row(['Max Trailing Take Profit', max_trailing_take_profit])
+t.add_row(['EMA Length', ema_length])
+t.add_row(['EMA Amplitude', ema_amplitude])
+t.add_row(['RSI Length', rsi_length])
+t.add_row(['RSI Long Reason', rsi_long_reason])
+t.add_row(['RSI Short Reason', rsi_short_reason])
+print(t)
+print(f"\n")
+
+
+df = get_dataframe(symbol, interval, start_time, end_time)
+fix_dataframe_index()
+
+while True:
+    now = time.localtime().tm_sec
+    time.sleep(60 - now)
+
+    update_dataframe()
+
+    break
+
+twm = ThreadedWebsocketManager()
+twm.start()
+
+twm.start_kline_futures_socket(callback=handle_socket_message, symbol=symbol)
+twm.join()
