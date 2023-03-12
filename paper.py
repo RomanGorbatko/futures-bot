@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta
 import random
 import os.path
+import sys
 
 import pandas as pd
 from pandas_ta import ema, rsi, psar
@@ -115,6 +116,7 @@ def process(df_data, event_data):
 
     if balance <= 0:
         print(f"Time: {current_time}, LIQUIDATION! Balance: {balance:.5f}")
+        sys.stdout.flush()
         twm.stop()
         return
 
@@ -160,6 +162,7 @@ def process(df_data, event_data):
 
                 print(f'Time: {current_time}, Increase: {touches - 1}, Entry Price: {entry_price:.5f}, '
                       f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
+                sys.stdout.flush()
 
                 return
             else:
@@ -170,6 +173,7 @@ def process(df_data, event_data):
 
         print(f"Time: {current_time}, Close Long Position; Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
               f"Exit Price: {exit_price:.5f}, Balance: {balance:.5f}")
+        sys.stdout.flush()
         return
 
     if short_position and (event_data.close >= stop_loss_price or event_data.close <= take_profit_price):
@@ -203,6 +207,7 @@ def process(df_data, event_data):
 
                 print(f'Time: {current_time}, Increase: {touches - 1}, Entry Price: {entry_price:.5f}, '
                       f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
+                sys.stdout.flush()
 
                 return
             else:
@@ -213,6 +218,7 @@ def process(df_data, event_data):
 
         print(f"Time: {current_time}, Close Short Position; Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
               f"Exit Price: {exit_price:.5f}, Balance: {balance:.5f}")
+        sys.stdout.flush()
         return
 
     if not short_position and touches == 0 and trend == TREND_DOWN \
@@ -238,6 +244,7 @@ def process(df_data, event_data):
             f"Time: {current_time}, Open Short; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
             f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}, "
             f"Balance: {balance:.5f}")
+        sys.stdout.flush()
 
     if not long_position and touches == 0 and trend == TREND_UP \
             and df_data.rsi > rsi_long_reason \
@@ -262,6 +269,7 @@ def process(df_data, event_data):
             f"Time: {current_time}, Open Long; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
             f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}"
             f", Balance: {balance:.5f}")
+        sys.stdout.flush()
 
 
 def handle_socket_message(event):
@@ -314,6 +322,7 @@ t.add_row(['RSI Long Reason', rsi_long_reason])
 t.add_row(['RSI Short Reason', rsi_short_reason])
 print(t)
 print(f"\n")
+sys.stdout.flush()
 
 
 df = get_dataframe(symbol, interval, start_time, end_time)
