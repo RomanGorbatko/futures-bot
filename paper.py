@@ -110,6 +110,7 @@ def process(df_data, event_data):
         last_orders, entry_price, short_position, position, last_action, trades
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+    current_price = float(event_data.close)
 
     if pd.isna(df_data.ema):
         return
@@ -131,8 +132,8 @@ def process(df_data, event_data):
         trend = NO_TREND
 
     # reason to long exit
-    if long_position and (event_data.close <= stop_loss_price or event_data.close >= take_profit_price):
-        exit_price = stop_loss_price if event_data.close <= stop_loss_price else take_profit_price
+    if long_position and (current_price <= stop_loss_price or current_price >= take_profit_price):
+        exit_price = stop_loss_price if current_price <= stop_loss_price else take_profit_price
         pnl = calculate_pnl(exit_price)
 
         if pnl < 0:
@@ -150,7 +151,7 @@ def process(df_data, event_data):
             if touches <= max_trailing_take_profit:
                 last_orders.append(
                     {
-                        'entry_price': event_data.close,
+                        'entry_price': current_price,
                         'last_action': INCREASE_LONG
                     }
                 )
@@ -176,8 +177,8 @@ def process(df_data, event_data):
         sys.stdout.flush()
         return
 
-    if short_position and (event_data.close >= stop_loss_price or event_data.close <= take_profit_price):
-        exit_price = stop_loss_price if event_data.close >= stop_loss_price else take_profit_price
+    if short_position and (current_price >= stop_loss_price or current_price <= take_profit_price):
+        exit_price = stop_loss_price if current_price >= stop_loss_price else take_profit_price
         pnl = calculate_pnl(exit_price, True)
 
         if pnl < 0:
@@ -194,7 +195,7 @@ def process(df_data, event_data):
             if touches <= max_trailing_take_profit:
                 last_orders.append(
                     {
-                        'entry_price': event_data.close,
+                        'entry_price': current_price,
                         'last_action': INCREASE_SHORT
                     }
                 )
@@ -225,7 +226,7 @@ def process(df_data, event_data):
             and df_data.rsi < rsi_short_reason \
             and df_data.ema_amplitude < 0 \
             and abs(df_data.ema_amplitude) > ema_amplitude:
-        entry_price = event_data.close
+        entry_price = current_price
         position = calculate_entry_position_size() / entry_price
         stop_loss_price = entry_price * (1 + stop_loss)
         take_profit_price = entry_price * (1 - take_profit)
@@ -250,7 +251,7 @@ def process(df_data, event_data):
             and df_data.rsi > rsi_long_reason \
             and df_data.ema_amplitude > 0 \
             and abs(df_data.ema_amplitude) > ema_amplitude:
-        entry_price = event_data.close
+        entry_price = current_price
         position = calculate_entry_position_size() / entry_price
         stop_loss_price = entry_price * (1 - stop_loss)
         take_profit_price = entry_price * (1 + take_profit)
