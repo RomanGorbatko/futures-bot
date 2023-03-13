@@ -28,7 +28,7 @@ balance = starting_balance = 500  # загальна сума в USDT на фь�
 risk_per_trade = .2  # відсоток (5%) від balance доступний для трейду
 
 leverage = 20
-stop_loss = .0001  # 0.5%
+stop_loss = .005  # 0.5%
 take_profit = .03  # 3%
 trailing_stop_loss = .01  # 0.5%
 trailing_take_profit = .02  # 0.5%
