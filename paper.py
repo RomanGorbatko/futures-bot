@@ -318,7 +318,7 @@ def process(df_data, event_data):
 def handle_socket_message(event):
     event_df = pd.DataFrame([event['k']])
     event_df = event_df.set_axis([
-        'kline_start_time', 'kline_close_time', 'first_trade_id', 'last_trade_id', 'open', 'close',
+        'kline_start_time', 'kline_close_time', 'interval', 'first_trade_id', 'last_trade_id', 'open', 'close',
         'high', 'low', 'volume', 'number_of_trades', 'is_closed', 'quote_asset_volume', 'taker_buy_volume',
         'taker_buy_quote_asset_volume', 'ignore'
     ], axis=1, copy=False)
