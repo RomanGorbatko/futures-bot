@@ -29,18 +29,20 @@ risk_per_trade = .2  # відсоток (5%) від balance доступний �
 
 leverage = 20
 stop_loss = .005  # 0.5%
-take_profit = .03  # 3%
-trailing_stop_loss = .01  # 0.5%
-trailing_take_profit = .02  # 0.5%
-max_trailing_take_profit = 3
+take_profit = .01  # 3%
+trailing_stop_loss = .005  # 0.5%
+trailing_take_profit = .01  # 0.5%
+max_trailing_take_profit = 2
 touches = 0
 
-ema_length = 300
-ema_amplitude = 2.5
+ema1_length = 9
+ema1_amplitude = 1.7
 
-rsi_length = 13
-rsi_long_reason = 70
-rsi_short_reason = 30
+ema2_length = 20
+ema2_amplitude = 2.5
+
+ema3_length = 50
+ema3_amplitude = 2.5
 
 long_position = False
 short_position = False
@@ -65,8 +67,14 @@ end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
 
 
 def get_percentage_difference(num_a, num_b):
-    diff = num_a.astype('float') - num_b.astype('float')
-    divided = diff / num_a.astype('float')
+    if isinstance(num_a, pd.Series):
+        num_a = num_a.astype('float')
+
+    if isinstance(num_b, pd.Series):
+        num_b = num_b.astype('float')
+
+    diff = num_a - num_b
+    divided = diff / num_a
 
     return divided * 100
 
@@ -100,9 +108,13 @@ def get_dataframe(s, i, st, et):
 
 
 def fix_dataframe_index():
-    df["ema"] = ema(df["close"], length=ema_length)
-    df["rsi"] = rsi(df["close"], length=rsi_length)
-    df["ema_amplitude"] = get_percentage_difference(df["close"], df["ema"])
+    df["ema1"] = ema(df["close"], length=ema1_length)
+    df["ema2"] = ema(df["close"], length=ema2_length)
+    df["ema3"] = ema(df["close"], length=ema3_length)
+
+    df["ema1_amplitude"] = get_percentage_difference(df["close"], df["ema1"])
+    df["ema2_amplitude"] = get_percentage_difference(df["close"], df["ema2"])
+    df["ema3_amplitude"] = get_percentage_difference(df["close"], df["ema3"])
 
 
 def process(df_data, event_data):
@@ -111,8 +123,9 @@ def process(df_data, event_data):
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
     current_price = float(event_data.close)
+    actual_amplitude = get_percentage_difference(current_price, df_data.ema1)
 
-    if pd.isna(df_data.ema):
+    if pd.isna(df_data.ema1) or pd.isna(df_data.ema2) or pd.isna(df_data.ema3):
         return
 
     if balance <= 0:
@@ -121,15 +134,18 @@ def process(df_data, event_data):
         twm.stop()
         return
 
-    last_price = df_data.close
-    last_sma = df_data.ema
+    # print(f"Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Ema1 "
+    #       f"Amplitude: {df_data.ema1_amplitude}, Actual Amplitude: {actual_amplitude}")
 
-    if last_price > last_sma:
-        trend = TREND_UP
-    elif last_price < last_sma:
-        trend = TREND_DOWN
-    else:
-        trend = NO_TREND
+    # last_price = df_data.close
+    # last_sma = df_data.ema
+    #
+    # if last_price > last_sma:
+    #     trend = TREND_UP
+    # elif last_price < last_sma:
+    #     trend = TREND_DOWN
+    # else:
+    #     trend = NO_TREND
 
     # reason to long exit
     if long_position and (current_price <= stop_loss_price or current_price >= take_profit_price):
@@ -222,10 +238,12 @@ def process(df_data, event_data):
         sys.stdout.flush()
         return
 
-    if not short_position and touches == 0 and trend == TREND_DOWN \
-            and df_data.rsi < rsi_short_reason \
-            and df_data.ema_amplitude < 0 \
-            and abs(df_data.ema_amplitude) > ema_amplitude:
+    if not short_position and touches == 0 \
+            and current_price > df_data.ema1 \
+            and current_price > df_data.ema2 \
+            and current_price > df_data.ema3 \
+            and actual_amplitude > 0 \
+            and abs(actual_amplitude) >= ema1_amplitude:
         entry_price = current_price
         position = calculate_entry_position_size() / entry_price
         stop_loss_price = entry_price * (1 + stop_loss)
@@ -247,10 +265,12 @@ def process(df_data, event_data):
             f"Balance: {balance:.5f}")
         sys.stdout.flush()
 
-    if not long_position and touches == 0 and trend == TREND_UP \
-            and df_data.rsi > rsi_long_reason \
-            and df_data.ema_amplitude > 0 \
-            and abs(df_data.ema_amplitude) > ema_amplitude:
+    if not long_position and touches == 0 \
+            and current_price < df_data.ema1 \
+            and current_price < df_data.ema2 \
+            and current_price < df_data.ema3 \
+            and actual_amplitude < 0 \
+            and abs(actual_amplitude) >= ema1_amplitude:
         entry_price = current_price
         position = calculate_entry_position_size() / entry_price
         stop_loss_price = entry_price * (1 - stop_loss)
@@ -318,11 +338,11 @@ t.add_row(['Take Profit', f"{take_profit * 100}%"])
 t.add_row(['Trailing Stop Loss', f"{trailing_stop_loss * 100}%"])
 t.add_row(['Trailing Take Profit', f"{trailing_take_profit * 100}%"])
 t.add_row(['Max Trailing Take Profit', max_trailing_take_profit])
-t.add_row(['EMA Length', ema_length])
-t.add_row(['EMA Amplitude', ema_amplitude])
-t.add_row(['RSI Length', rsi_length])
-t.add_row(['RSI Long Reason', rsi_long_reason])
-t.add_row(['RSI Short Reason', rsi_short_reason])
+# t.add_row(['EMA Length', ema_length])
+# t.add_row(['EMA Amplitude', ema_amplitude])
+# t.add_row(['RSI Length', rsi_length])
+# t.add_row(['RSI Long Reason', rsi_long_reason])
+# t.add_row(['RSI Short Reason', rsi_short_reason])
 print(t)
 print(f"\n")
 sys.stdout.flush()

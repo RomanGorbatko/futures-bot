@@ -24,14 +24,20 @@ risk_per_trade = .2  # відсоток (5%) від balance доступний �
 
 leverage = 20
 stop_loss = .005  # 0.5%
-take_profit = .03  # 3%
-trailing_stop_loss = .01  # 0.5%
-trailing_take_profit = .02  # 0.5%
-max_trailing_take_profit = 3
+take_profit = .01  # 3%
+trailing_stop_loss = .005  # 0.5%
+trailing_take_profit = .01  # 0.5%
+max_trailing_take_profit = 2
 touches = 0
 
-ema_length = 300
-ema_amplitude = 2.5
+ema1_length = 9
+ema1_amplitude = 2.5
+
+ema2_length = 20
+ema2_amplitude = 2.5
+
+ema3_length = 50
+ema3_amplitude = 2.5
 
 rsi_length = 13
 rsi_long_reason = 70
@@ -110,28 +116,35 @@ else:
 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
 df.set_index('timestamp', inplace=True)
 
-df["ema"] = ema(df["close"], length=ema_length)
+df["ema1"] = ema(df["close"], length=ema1_length)
+df["ema2"] = ema(df["close"], length=ema2_length)
+df["ema3"] = ema(df["close"], length=ema3_length)
+
+df["ema1_amplitude"] = get_percentage_difference(df["close"], df["ema1"])
+df["ema2_amplitude"] = get_percentage_difference(df["close"], df["ema2"])
+df["ema3_amplitude"] = get_percentage_difference(df["close"], df["ema3"])
+
 df["rsi"] = rsi(df["close"], length=rsi_length)
+
 # df["candle_amplitude"] = get_percentage_difference(df["high"], df["low"])
-df["ema_amplitude"] = get_percentage_difference(df["close"], df["ema"])
 
 for i in range(len(df)):
-    if pd.isna(df["ema"][i]):
+    if pd.isna(df["ema1"][i]) or pd.isna(df["ema2"][i]) or pd.isna(df["ema3"][i]):
         continue
 
     if balance <= 0:
         print(f"Time: {df.index[i]}, LIQUIDATION! Balance: {balance:.5f}")
         break
-
-    last_price = df['close'][i - 1]
-    last_sma = df['ema'][i - 1]
-
-    if last_price > last_sma:
-        trend = TREND_UP
-    elif last_price < last_sma:
-        trend = TREND_DOWN
-    else:
-        trend = NO_TREND
+    #
+    # last_price = df['close'][i - 1]
+    # last_sma = df['ema'][i - 1]
+    #
+    # if last_price > last_sma:
+    #     trend = TREND_UP
+    # elif last_price < last_sma:
+    #     trend = TREND_DOWN
+    # else:
+    #     trend = NO_TREND
 
     # reason to long exit
     if long_position and (df['low'][i] <= stop_loss_price or df['high'][i] >= take_profit_price):
@@ -220,10 +233,12 @@ for i in range(len(df)):
               f"Exit Price: {exit_price:.5f}, Balance: {balance:.5f}")
         continue
 
-    if not short_position and touches == 0 and trend == TREND_DOWN \
-            and df['rsi'][i] < rsi_short_reason \
-            and df['ema_amplitude'][i] < 0 \
-            and abs(df['ema_amplitude'][i]) > ema_amplitude:
+    if not short_position and touches == 0 \
+            and df['open'][i] > df['ema1'][i] \
+            and df['open'][i] > df['ema2'][i] \
+            and df['open'][i] > df['ema3'][i] \
+            and df["ema1_amplitude"][i] > 0 \
+            and abs(df["ema1_amplitude"][i]) >= ema1_amplitude:
         entry_price = df['open'][i]
         position = calculate_entry_position_size() / entry_price
         stop_loss_price = entry_price * (1 + stop_loss)
@@ -242,12 +257,14 @@ for i in range(len(df)):
         print(
             f"Time: {df.index[i]}, Open Short; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
             f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}, Ema Amplitude: "
-            f"{df['ema_amplitude'][i]:.5f}")
+            f"{df['ema3_amplitude'][i]:.5f}")
 
-    if not long_position and touches == 0 and trend == TREND_UP \
-            and df['rsi'][i] > rsi_long_reason \
-            and df['ema_amplitude'][i] > 0 \
-            and abs(df['ema_amplitude'][i]) > ema_amplitude:
+    if not long_position and touches == 0 \
+            and df['open'][i] < df['ema1'][i] \
+            and df['open'][i] < df['ema2'][i] \
+            and df['open'][i] < df['ema3'][i] \
+            and df["ema1_amplitude"][i] < 0 \
+            and abs(df["ema1_amplitude"][i]) >= ema1_amplitude:
         entry_price = df['open'][i]
         position = calculate_entry_position_size() / entry_price
         stop_loss_price = entry_price * (1 - stop_loss)
@@ -266,7 +283,7 @@ for i in range(len(df)):
         print(
             f"Time: {df.index[i]}, Open Long; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
             f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}, Ema Amplitude: "
-            f"{df['ema_amplitude'][i]:.5f}")
+            f"{df['ema3_amplitude'][i]:.5f}")
 
 print(f"\n")
 
@@ -291,8 +308,8 @@ t.add_row(['Take Profit', f"{take_profit * 100}%"])
 t.add_row(['Trailing Stop Loss', f"{trailing_stop_loss * 100}%"])
 t.add_row(['Trailing Take Profit', f"{trailing_take_profit * 100}%"])
 t.add_row(['Max Trailing Take Profit', max_trailing_take_profit])
-t.add_row(['EMA Length', ema_length])
-t.add_row(['EMA Amplitude', ema_amplitude])
+# t.add_row(['EMA Length', ema_length])
+# t.add_row(['EMA Amplitude', ema_amplitude])
 t.add_row(['RSI Length', rsi_length])
 t.add_row(['RSI Long Reason', rsi_long_reason])
 t.add_row(['RSI Short Reason', rsi_short_reason])
