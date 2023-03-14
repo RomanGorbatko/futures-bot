@@ -30,10 +30,10 @@ low_risk_per_trade = .02
 high_risk_per_trade = .1
 
 leverage = 20
-stop_loss = .005  # 0.5%
-take_profit = .01  # 3%
+stop_loss = .01  # 0.5%
+take_profit = .02  # 3%
 trailing_stop_loss = .005  # 0.5%
-trailing_take_profit = .001  # 0.5%
+trailing_take_profit = .01  # 0.5%
 max_trailing_takes = 2
 touches = 0
 
