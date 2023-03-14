@@ -87,7 +87,10 @@ def calculate_medium_order_entry():
 
 def calculate_entry_position_size():
     risk = low_risk_per_trade if touches == 0 else high_risk_per_trade
-    return ((balance * risk) * leverage) * (touches + 1)
+    position = ((balance * risk) * leverage) * (touches + 1)
+
+    print(f"Risk: {low_risk_per_trade * 100}%, Position: {position}")
+    return position
 
 
 def calculate_pnl(price, reverse=False):
