@@ -12,6 +12,7 @@ from binance import ThreadedWebsocketManager
 from prettytable import PrettyTable
 
 os.environ['TZ'] = 'ETC'
+event_log = 'event.csv'
 
 client = Client()
 
@@ -24,8 +25,9 @@ TREND_UP = 1
 TREND_DOWN = -1
 NO_TREND = 0
 
-balance = starting_balance = 500  # загальна сума в USDT на фьючах
-risk_per_trade = .2  # відсоток (5%) від balance доступний для трейду
+balance = starting_balance = 500
+low_risk_per_trade = .05
+high_risk_per_trade = .2
 
 leverage = 20
 stop_loss = .005  # 0.5%
@@ -84,7 +86,8 @@ def calculate_medium_order_entry():
 
 
 def calculate_entry_position_size():
-    return ((balance * risk_per_trade) * leverage) * (touches + 1)
+    risk = low_risk_per_trade if touches == 0 else high_risk_per_trade
+    return ((balance * risk) * leverage) * (touches + 1)
 
 
 def calculate_pnl(price, reverse=False):
@@ -115,6 +118,24 @@ def fix_dataframe_index():
     # df["ema1_amplitude"] = get_percentage_difference(df["close"], df["ema1"])
     # df["ema2_amplitude"] = get_percentage_difference(df["close"], df["ema2"])
     # df["ema3_amplitude"] = get_percentage_difference(df["close"], df["ema3"])
+
+
+def dump_to_csv(event_data):
+    # dump_header = event_df_columns
+    # dump_header.remove('interval')
+
+    # print(dump_header)
+    # print(event_data.columns)
+    # print(dump_header, list(event_data.columns))
+    # if file does not exist write header
+    if not os.path.isfile(event_log):
+        event_data.to_csv(event_log, index=False, header=[
+            'kline_start_time', 'kline_close_time', 'first_trade_id', 'last_trade_id', 'open', 'close',
+            'high', 'low', 'volume', 'number_of_trades', 'is_closed', 'quote_asset_volume', 'taker_buy_volume',
+            'taker_buy_quote_asset_volume', 'ignore'
+        ])
+    else:  # else it exists so append without writing the header
+        event_data.to_csv(event_log, index=False, header=False, mode='a')
 
 
 def process(df_data, event_data):
@@ -297,7 +318,7 @@ def process(df_data, event_data):
 def handle_socket_message(event):
     event_df = pd.DataFrame([event['k']])
     event_df = event_df.set_axis([
-        'kline_start_time', 'kline_close_time', 'interval', 'first_trade_id', 'last_trade_id', 'open', 'close',
+        'kline_start_time', 'kline_close_time', 'first_trade_id', 'last_trade_id', 'open', 'close',
         'high', 'low', 'volume', 'number_of_trades', 'is_closed', 'quote_asset_volume', 'taker_buy_volume',
         'taker_buy_quote_asset_volume', 'ignore'
     ], axis=1, copy=False)
@@ -307,6 +328,7 @@ def handle_socket_message(event):
     df_data = df.iloc[-1]
     event_data = event_df.iloc[0]
 
+    dump_to_csv(event_df)
     process(df_data, event_data)
 
 
@@ -332,7 +354,8 @@ t = PrettyTable(['Param', 'Value'])
 t.add_row(['Start Time', start_time])
 t.add_row(['End Time', end_time])
 t.add_row(['Interval', interval])
-t.add_row(['Risk Per Trade', f"{risk_per_trade * 100}%"])
+t.add_row(['Low Risk Per Trade', f"{low_risk_per_trade * 100}%"])
+t.add_row(['High Risk Per Trade', f"{high_risk_per_trade * 100}%"])
 t.add_row(['Leverage', leverage])
 t.add_row(['Stop Loss', f"{stop_loss * 100}%"])
 t.add_row(['Take Profit', f"{take_profit * 100}%"])
@@ -347,7 +370,6 @@ t.add_row(['Max Trailing Take Profit', max_trailing_take_profit])
 print(t)
 print(f"\n")
 sys.stdout.flush()
-
 
 df = get_dataframe(symbol, interval, start_time, end_time)
 fix_dataframe_index()
