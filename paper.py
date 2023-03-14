@@ -328,7 +328,7 @@ def handle_socket_message(event):
     df_data = df.iloc[-1]
     event_data = event_df.iloc[0]
 
-    dump_to_csv(event_df)
+    # dump_to_csv(event_df)
     process(df_data, event_data)
 
 
