@@ -36,7 +36,7 @@ max_trailing_take_profit = 2
 touches = 0
 
 ema1_length = 9
-ema1_amplitude = 1.7
+ema1_amplitude = 1.5
 
 ema2_length = 20
 ema2_amplitude = 2.5
@@ -112,9 +112,9 @@ def fix_dataframe_index():
     df["ema2"] = ema(df["close"], length=ema2_length)
     df["ema3"] = ema(df["close"], length=ema3_length)
 
-    df["ema1_amplitude"] = get_percentage_difference(df["close"], df["ema1"])
-    df["ema2_amplitude"] = get_percentage_difference(df["close"], df["ema2"])
-    df["ema3_amplitude"] = get_percentage_difference(df["close"], df["ema3"])
+    # df["ema1_amplitude"] = get_percentage_difference(df["close"], df["ema1"])
+    # df["ema2_amplitude"] = get_percentage_difference(df["close"], df["ema2"])
+    # df["ema3_amplitude"] = get_percentage_difference(df["close"], df["ema3"])
 
 
 def process(df_data, event_data):
@@ -122,8 +122,6 @@ def process(df_data, event_data):
         last_orders, entry_price, short_position, position, last_action, trades
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    current_price = float(event_data.close)
-    actual_amplitude = get_percentage_difference(current_price, df_data.ema1)
 
     if pd.isna(df_data.ema1) or pd.isna(df_data.ema2) or pd.isna(df_data.ema3):
         return
@@ -134,8 +132,11 @@ def process(df_data, event_data):
         twm.stop()
         return
 
-    # print(f"Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Ema1 "
-    #       f"Amplitude: {df_data.ema1_amplitude}, Actual Amplitude: {actual_amplitude}")
+    current_price = float(event_data.close)
+    actual_amplitude = get_percentage_difference(current_price, df_data.ema2)
+
+    # print(f"Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Actual "
+    #       f"Amplitude: {actual_amplitude}")
 
     # last_price = df_data.close
     # last_sma = df_data.ema
