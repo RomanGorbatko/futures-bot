@@ -26,19 +26,19 @@ TREND_DOWN = -1
 NO_TREND = 0
 
 balance = starting_balance = 500
-low_risk_per_trade = .05
-high_risk_per_trade = .2
+low_risk_per_trade = .02
+high_risk_per_trade = .1
 
 leverage = 20
 stop_loss = .005  # 0.5%
 take_profit = .01  # 3%
 trailing_stop_loss = .005  # 0.5%
-trailing_take_profit = .01  # 0.5%
-max_trailing_take_profit = 2
+trailing_take_profit = .001  # 0.5%
+max_trailing_takes = 2
 touches = 0
 
 ema1_length = 9
-ema1_amplitude = 1.5
+ema1_amplitude = 2
 
 ema2_length = 20
 ema2_amplitude = 2.5
@@ -52,7 +52,7 @@ entry_price = 0
 stop_loss_price = 0
 take_profit_price = 0
 asset_size = 0
-position = 0
+position_size = 0
 last_action = None
 trades = 0
 last_orders = []
@@ -85,18 +85,20 @@ def calculate_medium_order_entry():
     return sum(item['entry_price'] for item in last_orders) / len(last_orders)
 
 
-def calculate_entry_position_size(rate_log=False):
-    risk = low_risk_per_trade if touches == 0 else high_risk_per_trade
-    position_size = ((balance * risk) * leverage) * (touches + 1)
+def calculate_entry_position_size(high_risk=False):
+    global position_size
 
-    print(f"Risk: {risk * 100}%, Position: {position_size}")
+    risk = high_risk_per_trade if high_risk else low_risk_per_trade
+    position_size = ((balance * risk) * leverage)
+
+    # print(f"Risk: {risk * 100}%, Position: ${position_size:,.2f}")
     return position_size
 
 
 def calculate_pnl(price, reverse=False):
-    rate = (price / entry_price) if reverse is False else (entry_price / price)
+    rate = (entry_price / price) if reverse else (price / entry_price)
 
-    return (rate * calculate_entry_position_size()) - calculate_entry_position_size()
+    return (rate * position_size) - position_size
 
 
 def get_dataframe(s, i, st, et):
@@ -143,7 +145,7 @@ def dump_to_csv(event_data):
 
 def process(df_data, event_data):
     global balance, trend, long_position, stop_loss_price, take_profit_price, touches, trailing_loses, loses, wins, \
-        last_orders, entry_price, short_position, position, last_action, trades
+        last_orders, entry_price, short_position, position_size, last_action, trades, asset_size
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -162,16 +164,6 @@ def process(df_data, event_data):
     # print(f"Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Actual "
     #       f"Amplitude: {actual_amplitude}")
 
-    # last_price = df_data.close
-    # last_sma = df_data.ema
-    #
-    # if last_price > last_sma:
-    #     trend = TREND_UP
-    # elif last_price < last_sma:
-    #     trend = TREND_DOWN
-    # else:
-    #     trend = NO_TREND
-
     # reason to long exit
     if long_position and (current_price <= stop_loss_price or current_price >= take_profit_price):
         exit_price = stop_loss_price if current_price <= stop_loss_price else take_profit_price
@@ -186,10 +178,12 @@ def process(df_data, event_data):
                 loses += 1
 
             touches = 0
+            position_size = 0
+            asset_size = 0
 
             balance += pnl
         else:
-            if touches <= max_trailing_take_profit:
+            if touches <= max_trailing_takes:
                 last_orders.append(
                     {
                         'entry_price': current_price,
@@ -199,22 +193,27 @@ def process(df_data, event_data):
 
                 touches += 1
                 entry_price = calculate_medium_order_entry()
+                position_size += calculate_entry_position_size(True)
+                asset_size = position_size / entry_price
                 stop_loss_price = entry_price * (1 - trailing_stop_loss)
                 take_profit_price = entry_price * (1 + trailing_take_profit)
 
-                print(f'Time: {current_time}, Increase: {touches - 1}, Entry Price: {entry_price:.5f}, '
+                print(f'Time: {current_time}, Increase: {touches - 1}, Position Size: ${position_size:,.2f}, Asset '
+                      f'Size: {asset_size:.3f}, Entry Price: {entry_price:.5f}, '
                       f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
                 sys.stdout.flush()
-
                 return
             else:
                 touches = 0
                 long_position = False
+                position_size = 0
+                asset_size = 0
                 wins += 1
                 balance += pnl
 
-        print(f"Time: {current_time}, Close Long Position; Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
-              f"Exit Price: {exit_price:.5f}, Balance: {balance:.5f}")
+        print(f"Time: {current_time}, Close Long ❗️️ Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
+              f"Exit Price: {exit_price:.5f}, Balance: ${balance:,.2f}")
+        exit()
         sys.stdout.flush()
         return
 
@@ -231,9 +230,11 @@ def process(df_data, event_data):
                 loses += 1
 
             touches = 0
+            position_size = 0
+            asset_size = 0
             balance += pnl
         else:
-            if touches <= max_trailing_take_profit:
+            if touches <= max_trailing_takes:
                 last_orders.append(
                     {
                         'entry_price': current_price,
@@ -243,23 +244,26 @@ def process(df_data, event_data):
 
                 touches += 1
                 entry_price = calculate_medium_order_entry()
-
+                position_size += calculate_entry_position_size(True)
+                asset_size = position_size / entry_price
                 stop_loss_price = entry_price * (1 + trailing_stop_loss)
                 take_profit_price = entry_price * (1 - trailing_take_profit)
 
-                print(f'Time: {current_time}, Increase: {touches - 1}, Entry Price: {entry_price:.5f}, '
+                print(f'Time: {current_time}, Increase: {touches - 1}, Position Size: ${position_size:,.2f}, Asset '
+                      f'Size: {asset_size:.3f}, Entry Price: {entry_price:.5f}, '
                       f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
                 sys.stdout.flush()
-
                 return
             else:
                 touches = 0
                 short_position = False
+                position_size = 0
+                asset_size = 0
                 wins += 1
                 balance += pnl
 
-        print(f"Time: {current_time}, Close Short Position; Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
-              f"Exit Price: {exit_price:.5f}, Balance: {balance:.5f}")
+        print(f"Time: {current_time}, Close Short ❗️ Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
+              f"Exit Price: {exit_price:.5f}, Balance: ${balance:,.2f}")
         sys.stdout.flush()
         return
 
@@ -270,7 +274,8 @@ def process(df_data, event_data):
             and actual_amplitude > 0 \
             and abs(actual_amplitude) >= ema1_amplitude:
         entry_price = current_price
-        position = calculate_entry_position_size() / entry_price
+        position_size = calculate_entry_position_size()
+        asset_size = position_size / entry_price
         stop_loss_price = entry_price * (1 + stop_loss)
         take_profit_price = entry_price * (1 - take_profit)
         short_position = True
@@ -285,9 +290,10 @@ def process(df_data, event_data):
             }
         )
         print(
-            f"Time: {current_time}, Open Short; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
+            f"Time: {current_time}, Open Short ❗ Position Size: ${position_size:,.2f}, Asset Size: {asset_size:.3f}, "
+            f"Entry Price: {entry_price:.5f}, "
             f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}, "
-            f"Balance: {balance:.5f}")
+            f"Balance: ${balance:,.2f}")
         sys.stdout.flush()
 
     if not long_position and touches == 0 \
@@ -297,7 +303,8 @@ def process(df_data, event_data):
             and actual_amplitude < 0 \
             and abs(actual_amplitude) >= ema1_amplitude:
         entry_price = current_price
-        position = calculate_entry_position_size() / entry_price
+        position_size = calculate_entry_position_size()
+        asset_size = position_size / entry_price
         stop_loss_price = entry_price * (1 - stop_loss)
         take_profit_price = entry_price * (1 + take_profit)
         long_position = True
@@ -312,9 +319,10 @@ def process(df_data, event_data):
             }
         )
         print(
-            f"Time: {current_time}, Open Long; Position Size: {position:.5f}, Entry Price: {entry_price:.5f}, "
+            f"Time: {current_time}, Open Long ❗️ Position Size: ${position_size:,.2f}, Asset Size: {asset_size:.3f}, "
+            f"Entry Price: {entry_price:.5f}, "
             f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}"
-            f", Balance: {balance:.5f}")
+            f", Balance: ${balance:,.2f}")
         sys.stdout.flush()
 
 
@@ -364,7 +372,7 @@ t.add_row(['Stop Loss', f"{stop_loss * 100}%"])
 t.add_row(['Take Profit', f"{take_profit * 100}%"])
 t.add_row(['Trailing Stop Loss', f"{trailing_stop_loss * 100}%"])
 t.add_row(['Trailing Take Profit', f"{trailing_take_profit * 100}%"])
-t.add_row(['Max Trailing Take Profit', max_trailing_take_profit])
+t.add_row(['Max Trailing Take Profit', max_trailing_takes])
 # t.add_row(['EMA Length', ema_length])
 # t.add_row(['EMA Amplitude', ema_amplitude])
 # t.add_row(['RSI Length', rsi_length])
