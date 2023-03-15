@@ -21,9 +21,8 @@ OPEN_SHORT = 'open_short'
 INCREASE_LONG = 'increase_long'
 INCREASE_SHORT = 'increase_short'
 
-TREND_UP = 1
-TREND_DOWN = -1
-NO_TREND = 0
+DIRECTION_LONG = 'Long'
+DIRECTION_SHORT = 'Short'
 
 balance = starting_balance = 500
 low_risk_per_trade = .02
@@ -147,7 +146,83 @@ def dump_to_csv(event_data):
         event_data.to_csv(event_log, index=False, header=False, mode='a')
 
 
-def process(df_data, event_data):
+def close_position(pnl, direction):
+    global long_position, short_position, trailing_loses, loses, wins, \
+        touches, position_size, asset_size, balance
+
+    if direction is DIRECTION_LONG:
+        long_position = False
+    else:
+        short_position = False
+
+    if pnl < 0:
+        if touches > 1:
+            trailing_loses += 1
+        else:
+            loses += 1
+    else:
+        wins += 1
+
+    touches = 0
+    position_size = 0
+    asset_size = 0
+
+    balance += pnl
+
+
+def manage_opened_position(current_price, direction):
+    global stop_loss_price, take_profit_price, touches, long_position, trailing_loses, loses, position_size, \
+        asset_size, balance, entry_price, wins, short_position
+
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+
+    if direction is DIRECTION_LONG:
+        exit_condition = current_price <= stop_loss_price
+    else:
+        exit_condition = current_price >= stop_loss_price
+
+    exit_price = stop_loss_price if exit_condition else take_profit_price
+    pnl = calculate_pnl(exit_price, direction is DIRECTION_SHORT)
+
+    if pnl < 0:  # stop loss
+        close_position(pnl, direction)
+    else:  # take profits
+        if touches <= max_trailing_takes:  # trailing
+            last_action_increase = INCREASE_LONG if direction is DIRECTION_LONG else INCREASE_SHORT
+            last_orders.append(
+                {
+                    'entry_price': current_price,
+                    'last_action': last_action_increase
+                }
+            )
+
+            touches += 1
+            entry_price = calculate_medium_order_entry()
+            position_size += calculate_entry_position_size(True)
+            asset_size = position_size / entry_price
+
+            if direction is DIRECTION_LONG:
+                stop_loss_price = entry_price * (1 - trailing_stop_loss)
+                take_profit_price = entry_price * (1 + trailing_take_profit)
+            else:
+                stop_loss_price = entry_price * (1 + trailing_stop_loss)
+                take_profit_price = entry_price * (1 - trailing_take_profit)
+
+            print(f'Time: {current_time}, Increase {direction}: {touches - 1}, Position Size: ${position_size:,.2f}, '
+                  f'Asset Size: {asset_size:.3f}, Entry Price: {entry_price:.5f}, '
+                  f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
+            sys.stdout.flush()
+
+            return
+        else:  # absolute take profit
+            close_position(pnl, direction)
+
+    print(f"Time: {current_time}, Close {direction} ❗️️ Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
+          f"Exit Price: {exit_price:.5f}, Balance: ${balance:,.2f}")
+    sys.stdout.flush()
+
+
+def process_kline_event(df_data, event_data):
     global balance, trend, long_position, stop_loss_price, take_profit_price, touches, trailing_loses, loses, wins, \
         last_orders, entry_price, short_position, position_size, last_action, trades, asset_size
 
@@ -170,105 +245,11 @@ def process(df_data, event_data):
 
     # reason to long exit
     if long_position and (current_price <= stop_loss_price or current_price >= take_profit_price):
-        exit_price = stop_loss_price if current_price <= stop_loss_price else take_profit_price
-        pnl = calculate_pnl(exit_price)
-
-        if pnl < 0:
-            long_position = False
-
-            if touches > 1:
-                trailing_loses += 1
-            else:
-                loses += 1
-
-            touches = 0
-            position_size = 0
-            asset_size = 0
-
-            balance += pnl
-        else:
-            if touches <= max_trailing_takes:
-                last_orders.append(
-                    {
-                        'entry_price': current_price,
-                        'last_action': INCREASE_LONG
-                    }
-                )
-
-                touches += 1
-                entry_price = calculate_medium_order_entry()
-                position_size += calculate_entry_position_size(True)
-                asset_size = position_size / entry_price
-                stop_loss_price = entry_price * (1 - trailing_stop_loss)
-                take_profit_price = entry_price * (1 + trailing_take_profit)
-
-                print(f'Time: {current_time}, Increase: {touches - 1}, Position Size: ${position_size:,.2f}, Asset '
-                      f'Size: {asset_size:.3f}, Entry Price: {entry_price:.5f}, '
-                      f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
-                sys.stdout.flush()
-                return
-            else:
-                touches = 0
-                long_position = False
-                position_size = 0
-                asset_size = 0
-                wins += 1
-                balance += pnl
-
-        print(f"Time: {current_time}, Close Long ❗️️ Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
-              f"Exit Price: {exit_price:.5f}, Balance: ${balance:,.2f}")
-        exit()
-        sys.stdout.flush()
+        manage_opened_position(current_price, DIRECTION_LONG)
         return
 
     if short_position and (current_price >= stop_loss_price or current_price <= take_profit_price):
-        exit_price = stop_loss_price if current_price >= stop_loss_price else take_profit_price
-        pnl = calculate_pnl(exit_price, True)
-
-        if pnl < 0:
-            short_position = False
-
-            if touches > 1:
-                trailing_loses += 1
-            else:
-                loses += 1
-
-            touches = 0
-            position_size = 0
-            asset_size = 0
-            balance += pnl
-        else:
-            if touches <= max_trailing_takes:
-                last_orders.append(
-                    {
-                        'entry_price': current_price,
-                        'last_action': INCREASE_SHORT
-                    }
-                )
-
-                touches += 1
-                entry_price = calculate_medium_order_entry()
-                position_size += calculate_entry_position_size(True)
-                asset_size = position_size / entry_price
-                stop_loss_price = entry_price * (1 + trailing_stop_loss)
-                take_profit_price = entry_price * (1 - trailing_take_profit)
-
-                print(f'Time: {current_time}, Increase: {touches - 1}, Position Size: ${position_size:,.2f}, Asset '
-                      f'Size: {asset_size:.3f}, Entry Price: {entry_price:.5f}, '
-                      f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
-                sys.stdout.flush()
-                return
-            else:
-                touches = 0
-                short_position = False
-                position_size = 0
-                asset_size = 0
-                wins += 1
-                balance += pnl
-
-        print(f"Time: {current_time}, Close Short ❗️ Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
-              f"Exit Price: {exit_price:.5f}, Balance: ${balance:,.2f}")
-        sys.stdout.flush()
+        manage_opened_position(current_price, DIRECTION_SHORT)
         return
 
     if not short_position and touches == 0 \
@@ -344,7 +325,7 @@ def handle_socket_message(event):
     event_data = event_df.iloc[0]
 
     # dump_to_csv(event_df)
-    process(df_data, event_data)
+    process_kline_event(df_data, event_data)
 
 
 def update_dataframe(skip_timer=False):
