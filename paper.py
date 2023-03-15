@@ -7,14 +7,14 @@ import sys
 
 import pandas as pd
 from pandas_ta import ema, rsi, psar
+from binance.exceptions import BinanceAPIException
 from binance.client import Client
 from binance import ThreadedWebsocketManager
 from prettytable import PrettyTable
+from requests import ReadTimeout
 
 os.environ['TZ'] = 'ETC'
 event_log = 'event.csv'
-
-client = Client()
 
 OPEN_LONG = 'open_long'
 OPEN_SHORT = 'open_short'
@@ -66,6 +66,10 @@ symbol = 'APTUSDT'
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
 end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
+
+
+def create_client():
+    return Client()
 
 
 def get_percentage_difference(num_a, num_b):
@@ -343,22 +347,30 @@ def handle_socket_message(event):
     process(df_data, event_data)
 
 
-def update_dataframe():
-    global df
+def update_dataframe(skip_timer=False):
+    global df, client
 
-    threading.Timer(60, update_dataframe).start()
+    if not skip_timer:
+        threading.Timer(60, update_dataframe).start()
 
     previous_minute = (datetime.now() - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
     current_minute = time.strftime('%Y-%m-%d %H:%M:%S')
 
-    fresh_df = get_dataframe(symbol, interval, previous_minute, current_minute)
+    try:
+        fresh_df = get_dataframe(symbol, interval, previous_minute, current_minute)
 
-    index = fresh_df.first_valid_index()
-    if index in df.index:
-        df.drop(index, inplace=True)
+        index = fresh_df.first_valid_index()
+        if index in df.index:
+            df.drop(index, inplace=True)
 
-    df = pd.concat([df, fresh_df])
-    fix_dataframe_index()
+        df = pd.concat([df, fresh_df])
+        fix_dataframe_index()
+    except ReadTimeout as re:
+        print(f"Time: {current_minute}, Exception ❗ Type: ReadTimeout")
+    except BinanceAPIException as bae:
+        print(f"Time: {current_minute}, Exception ❗ Type: BinanceAPIException, Message: f{bae.message}")
+
+        client = create_client()
 
 
 t = PrettyTable(['Param', 'Value'])
@@ -381,6 +393,8 @@ t.add_row(['Max Trailing Take Profit', max_trailing_takes])
 print(t)
 print(f"\n")
 sys.stdout.flush()
+
+client = create_client()
 
 df = get_dataframe(symbol, interval, start_time, end_time)
 fix_dataframe_index()
