@@ -1,11 +1,12 @@
 import threading
 import time
 from datetime import datetime, timedelta
-import random
 import os.path
 import sys
 
 import pandas as pd
+import requests
+from dotenv import load_dotenv
 from pandas_ta import ema, rsi, psar
 from binance.exceptions import BinanceAPIException
 from binance.client import Client
@@ -13,7 +14,9 @@ from binance import ThreadedWebsocketManager
 from prettytable import PrettyTable
 from requests import ReadTimeout
 
-os.environ['TZ'] = 'ETC'
+load_dotenv()
+
+os.environ['TZ'] = 'UTC'
 event_log = 'event.csv'
 
 OPEN_LONG = 'open_long'
@@ -65,6 +68,25 @@ symbol = 'APTUSDT'
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
 end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
+
+
+def print_log(data, pt=None):
+    telegram_text = 'Env: ' + os.getenv('ENV') + '\n'
+
+    if pt is None:
+        pt = PrettyTable(['Param', 'Value'])
+        for key, value in data.items():
+            pt.add_row([key, value])
+            telegram_text += str(key) + ': ' + str(value) + '\n'
+        pt.add_row(['Env', os.getenv('ENV')])
+
+    print(pt)
+    sys.stdout.flush()
+
+    send_text = 'https://api.telegram.org/bot' + os.getenv('TELEGRAM_BOT_ID') + '/sendMessage?chat_id=' \
+                + str(os.getenv('TELEGRAM_CHAT_ID')) + '&parse_mode=html&text=' + telegram_text
+
+    response = requests.get(send_text)
 
 
 def create_client():
@@ -208,18 +230,28 @@ def manage_opened_position(current_price, direction):
                 stop_loss_price = entry_price * (1 + trailing_stop_loss)
                 take_profit_price = entry_price * (1 - trailing_take_profit)
 
-            print(f'Time: {current_time}, Increase {direction}: {touches - 1}, Position Size: ${position_size:,.2f}, '
-                  f'Asset Size: {asset_size:.3f}, Entry Price: {entry_price:.5f}, '
-                  f'Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}')
-            sys.stdout.flush()
+            print_log({
+                'Time': current_time,
+                f'Increase {direction}': touches - 1,
+                'Position Size': f'{position_size:,.2f}',
+                'Asset Size': f'{asset_size:.3f}',
+                'Entry Price': f'{entry_price:.5f}',
+                'Stop Loss Price': f'{stop_loss_price:.5f}',
+                'Take Profit Price': f'{take_profit_price:.5f}',
+            })
 
             return
         else:  # absolute take profit
             close_position(pnl, direction)
 
-    print(f"Time: {current_time}, Close {direction} ❗️️ Pnl: {pnl:.5f}, Entry Price: {entry_price:.5f}, "
-          f"Exit Price: {exit_price:.5f}, Balance: ${balance:,.2f}")
-    sys.stdout.flush()
+    print_log({
+        'Time': current_time,
+        'Close': f'{direction} 🔵️',
+        'Pnl': f'${pnl:,.2f}',
+        'Entry Price': f'{entry_price:.5f}',
+        'Exit Price': f'{exit_price:.5f}',
+        'Balance': f'${balance:,.2f}',
+    })
 
 
 def process_kline_event(df_data, event_data):
@@ -274,12 +306,17 @@ def process_kline_event(df_data, event_data):
                 'last_action': last_action
             }
         )
-        print(
-            f"Time: {current_time}, Open Short ❗ Position Size: ${position_size:,.2f}, Asset Size: {asset_size:.3f}, "
-            f"Entry Price: {entry_price:.5f}, "
-            f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}, "
-            f"Balance: ${balance:,.2f}")
-        sys.stdout.flush()
+
+        print_log({
+            'Time': current_time,
+            'Open': 'Short 🔴',
+            'Position Size': f'${position_size:,.2f}',
+            'Asset Size': f'{asset_size:.5f}',
+            'Entry Price': f'{entry_price:.5f}',
+            'Stop Loss Price': f'{stop_loss_price:.5f}',
+            'Take Profit Price': f'{take_profit_price:.5f}',
+            'Balance': f'${balance:,.2f}',
+        })
 
     if not long_position and touches == 0 \
             and current_price < df_data.ema1 \
@@ -303,11 +340,17 @@ def process_kline_event(df_data, event_data):
                 'last_action': last_action
             }
         )
-        print(
-            f"Time: {current_time}, Open Long ❗️ Position Size: ${position_size:,.2f}, Asset Size: {asset_size:.3f}, "
-            f"Entry Price: {entry_price:.5f}, "
-            f"Stop Loss Price: {stop_loss_price:.5f}, Take Profit Price: {take_profit_price:.5f}"
-            f", Balance: ${balance:,.2f}")
+
+        print_log({
+            'Time': current_time,
+            'Open': 'Long 🟢',
+            'Position Size': f'${position_size:,.2f}',
+            'Asset Size': f'{asset_size:.5f}',
+            'Entry Price': f'{entry_price:.5f}',
+            'Stop Loss Price': f'{stop_loss_price:.5f}',
+            'Take Profit Price': f'{take_profit_price:.5f}',
+            'Balance': f'${balance:,.2f}',
+        })
         sys.stdout.flush()
 
 
@@ -371,9 +414,20 @@ t.add_row(['Max Trailing Take Profit', max_trailing_takes])
 # t.add_row(['RSI Length', rsi_length])
 # t.add_row(['RSI Long Reason', rsi_long_reason])
 # t.add_row(['RSI Short Reason', rsi_short_reason])
-print(t)
-print(f"\n")
-sys.stdout.flush()
+
+print_log({
+    'Start Time': start_time,
+    'End Time': end_time,
+    'Interval': interval,
+    'Low Risk Per Trade': f"{low_risk_per_trade * 100}%",
+    'High Risk Per Trade': f"{high_risk_per_trade * 100}%",
+    'Leverage': leverage,
+    'Stop Loss': f"{stop_loss * 100}%",
+    'Take Profit': f"{take_profit * 100}%",
+    'Trailing Stop Loss': f"{trailing_stop_loss * 100}%",
+    'Trailing Take Profit': f"{trailing_take_profit * 100}%",
+    'Max Trailing Take Profit': max_trailing_takes,
+})
 
 client = create_client()
 

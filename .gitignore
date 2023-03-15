@@ -3,3 +3,4 @@ venv
 results
 .DS_Store
 log.csv
+.env
