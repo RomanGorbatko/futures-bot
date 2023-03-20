@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta
 import os.path
 import sys
+from pprint import pprint
 
 import pandas as pd
 import requests
@@ -15,6 +16,7 @@ from prettytable import PrettyTable
 from requests import ReadTimeout
 
 load_dotenv()
+ENV = os.getenv('ENV') or 'local'
 
 os.environ['TZ'] = 'UTC'
 event_log = 'event.csv'
@@ -40,13 +42,11 @@ max_trailing_takes = 2
 touches = 0
 
 ema1_length = 9
-ema1_amplitude = 2
+ema_amplitude_minimum = 2
+ema_amplitude_peak = 0
 
 ema2_length = 20
-ema2_amplitude = 2.5
-
 ema3_length = 50
-ema3_amplitude = 2.5
 
 long_position = False
 short_position = False
@@ -64,6 +64,8 @@ wins = 0
 loses = 0
 trailing_loses = 0
 
+twm = ThreadedWebsocketManager()
+socket_name = None
 symbol = 'APTUSDT'
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
@@ -71,22 +73,23 @@ end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
 
 
 def print_log(data, pt=None):
-    telegram_text = 'Env: ' + os.getenv('ENV') + '\n'
+    telegram_text = 'Env: ' + ENV + '\n'
 
     if pt is None:
         pt = PrettyTable(['Param', 'Value'])
         for key, value in data.items():
             pt.add_row([key, value])
             telegram_text += str(key) + ': ' + str(value) + '\n'
-        pt.add_row(['Env', os.getenv('ENV')])
+        pt.add_row(['Env', ENV])
 
     print(pt)
     sys.stdout.flush()
 
-    send_text = 'https://api.telegram.org/bot' + os.getenv('TELEGRAM_BOT_ID') + '/sendMessage?chat_id=' \
-                + str(os.getenv('TELEGRAM_CHAT_ID')) + '&parse_mode=html&text=' + telegram_text
+    if os.getenv('TELEGRAM_CHAT_ID') and os.getenv('TELEGRAM_BOT_ID'):
+        send_text = 'https://api.telegram.org/bot' + os.getenv('TELEGRAM_BOT_ID') + '/sendMessage?chat_id=' \
+                    + str(os.getenv('TELEGRAM_CHAT_ID')) + '&parse_mode=html&text=' + telegram_text
 
-    response = requests.get(send_text)
+        response = requests.get(send_text)
 
 
 def create_client():
@@ -232,6 +235,7 @@ def manage_opened_position(current_price, direction):
 
             print_log({
                 'Time': current_time,
+                'Symbol': symbol,
                 f'Increase {direction}': touches - 1,
                 'Position Size': f'{position_size:,.2f}',
                 'Asset Size': f'{asset_size:.3f}',
@@ -246,6 +250,7 @@ def manage_opened_position(current_price, direction):
 
     print_log({
         'Time': current_time,
+        'Symbol': symbol,
         'Close': f'{direction} 🔵️',
         'Pnl': f'${pnl:,.2f}',
         'Entry Price': f'{entry_price:.5f}',
@@ -256,7 +261,7 @@ def manage_opened_position(current_price, direction):
 
 def process_kline_event(df_data, event_data):
     global balance, trend, long_position, stop_loss_price, take_profit_price, touches, trailing_loses, loses, wins, \
-        last_orders, entry_price, short_position, position_size, last_action, trades, asset_size
+        last_orders, entry_price, short_position, position_size, last_action, trades, asset_size, ema_amplitude_peak
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -272,8 +277,8 @@ def process_kline_event(df_data, event_data):
     current_price = float(event_data.close)
     actual_amplitude = get_percentage_difference(current_price, df_data.ema2)
 
-    # print(f"Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Actual "
-    #       f"Amplitude: {actual_amplitude}")
+    print(f"Symbol: {symbol}, Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Actual "
+          f"Amplitude: {actual_amplitude}")
 
     # reason to long exit
     if long_position and (current_price <= stop_loss_price or current_price >= take_profit_price):
@@ -289,7 +294,7 @@ def process_kline_event(df_data, event_data):
             and current_price > df_data.ema2 \
             and current_price > df_data.ema3 \
             and actual_amplitude > 0 \
-            and abs(actual_amplitude) >= ema1_amplitude:
+            and abs(actual_amplitude) >= ema_amplitude_minimum:
         entry_price = current_price
         position_size = calculate_entry_position_size()
         asset_size = position_size / entry_price
@@ -309,6 +314,7 @@ def process_kline_event(df_data, event_data):
 
         print_log({
             'Time': current_time,
+            'Symbol': symbol,
             'Open': 'Short 🔴',
             'Position Size': f'${position_size:,.2f}',
             'Asset Size': f'{asset_size:.5f}',
@@ -318,12 +324,21 @@ def process_kline_event(df_data, event_data):
             'Balance': f'${balance:,.2f}',
         })
 
+    # if not long_position and touches == 0 \
+    #         and current_price < df_data.ema1 \
+    #         and current_price < df_data.ema2 \
+    #         and current_price < df_data.ema3:
+    #     if abs(actual_amplitude) > ema_amplitude_peak:
+    #         ema_amplitude_peak = abs(actual_amplitude)
+    #
+    #     print(abs(actual_amplitude), ema_amplitude_peak)
+
     if not long_position and touches == 0 \
             and current_price < df_data.ema1 \
             and current_price < df_data.ema2 \
             and current_price < df_data.ema3 \
             and actual_amplitude < 0 \
-            and abs(actual_amplitude) >= ema1_amplitude:
+            and abs(actual_amplitude) >= ema_amplitude_minimum:
         entry_price = current_price
         position_size = calculate_entry_position_size()
         asset_size = position_size / entry_price
@@ -343,6 +358,7 @@ def process_kline_event(df_data, event_data):
 
         print_log({
             'Time': current_time,
+            'Symbol': symbol,
             'Open': 'Long 🟢',
             'Position Size': f'${position_size:,.2f}',
             'Asset Size': f'{asset_size:.5f}',
@@ -380,6 +396,9 @@ def update_dataframe(skip_timer=False):
     previous_minute = (datetime.now() - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
     current_minute = time.strftime('%Y-%m-%d %H:%M:%S')
 
+    if symbol is None:
+        return
+
     try:
         fresh_df = get_dataframe(symbol, interval, previous_minute, current_minute)
 
@@ -396,26 +415,70 @@ def update_dataframe(skip_timer=False):
 
         client = create_client()
 
+        if datetime.now().minute == 0:
+            print(f"Time: {current_minute}, Ping")
+            sys.stdout.flush()
 
-t = PrettyTable(['Param', 'Value'])
-t.add_row(['Start Time', start_time])
-t.add_row(['End Time', end_time])
-t.add_row(['Interval', interval])
-t.add_row(['Low Risk Per Trade', f"{low_risk_per_trade * 100}%"])
-t.add_row(['High Risk Per Trade', f"{high_risk_per_trade * 100}%"])
-t.add_row(['Leverage', leverage])
-t.add_row(['Stop Loss', f"{stop_loss * 100}%"])
-t.add_row(['Take Profit', f"{take_profit * 100}%"])
-t.add_row(['Trailing Stop Loss', f"{trailing_stop_loss * 100}%"])
-t.add_row(['Trailing Take Profit', f"{trailing_take_profit * 100}%"])
-t.add_row(['Max Trailing Take Profit', max_trailing_takes])
-# t.add_row(['EMA Length', ema_length])
-# t.add_row(['EMA Amplitude', ema_amplitude])
-# t.add_row(['RSI Length', rsi_length])
-# t.add_row(['RSI Long Reason', rsi_long_reason])
-# t.add_row(['RSI Short Reason', rsi_short_reason])
+
+def switch_symbol(should_start_streaming=False, min_volume=300000000):
+    global symbol, twm
+
+    threading.Timer(120, switch_symbol, [True]).start()
+
+    if long_position is True or short_position is True:
+        return
+
+    if twm.is_alive():
+        print('stopped1')
+        twm.stop_socket(socket_name)
+        twm.stop()
+        twm.stop_client()
+        # twm = ThreadedWebsocketManager()
+
+    ticker_details = client.futures_ticker()
+
+    perpetual_details = [x for x in ticker_details if float(x['volume']) > min_volume]
+    perpetual_details = sorted(perpetual_details, key=lambda item: float(item['priceChangePercent']), reverse=True)
+
+    first_ticker = perpetual_details[0]
+    last_ticker = perpetual_details[-1]
+
+    if abs(float(first_ticker['priceChangePercent'])) > abs(float(last_ticker['priceChangePercent'])):
+        winner = first_ticker
+    else:
+        winner = last_ticker
+
+    symbol = winner['symbol']
+
+    if should_start_streaming:
+        print_log({
+            'Switched Symbol': symbol,
+            'Changed': f"{float(winner['priceChangePercent'])}%",
+            'Volume': f"${float(winner['volume']):,.2f}"
+        })
+
+        start_streaming(symbol)
+
+
+def start_streaming(s):
+    global twm, socket_name
+
+    if twm.is_alive():
+        print('stopped2')
+        twm.stop()
+        twm = ThreadedWebsocketManager()
+
+    twm.start()
+    socket_name = twm.start_kline_futures_socket(callback=handle_socket_message, symbol=s)
+    twm.join()
+
+
+client = create_client()
+
+# switch_symbol()
 
 print_log({
+    'Symbol': symbol,
     'Start Time': start_time,
     'End Time': end_time,
     'Interval': interval,
@@ -427,9 +490,8 @@ print_log({
     'Trailing Stop Loss': f"{trailing_stop_loss * 100}%",
     'Trailing Take Profit': f"{trailing_take_profit * 100}%",
     'Max Trailing Take Profit': max_trailing_takes,
+    'Ema Amplitude Minimum': ema_amplitude_minimum
 })
-
-client = create_client()
 
 df = get_dataframe(symbol, interval, start_time, end_time)
 fix_dataframe_index()
@@ -439,11 +501,6 @@ while True:
     time.sleep(60 - now)
 
     update_dataframe()
+    start_streaming(symbol)
 
     break
-
-twm = ThreadedWebsocketManager()
-twm.start()
-
-twm.start_kline_futures_socket(callback=handle_socket_message, symbol=symbol)
-twm.join()
