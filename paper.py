@@ -67,6 +67,7 @@ trailing_loses = 0
 twm = ThreadedWebsocketManager()
 socket_name = None
 symbol = 'APTUSDT'
+
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
 end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
