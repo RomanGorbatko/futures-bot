@@ -265,6 +265,52 @@ def manage_opened_position(s, current_price, direction):
     })
 
 
+def open_position(s, current_price, direction):
+    global symbol_position, entry_price, position_size, asset_size, stop_loss_price, take_profit_price, long_position, \
+        last_action, touches, trades, last_orders, short_position
+
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+
+    symbol_position = s
+    entry_price = current_price
+    position_size = calculate_entry_position_size()
+    asset_size = position_size / entry_price
+    touches = 1
+    trades += 1
+    last_orders = []
+
+    if direction is DIRECTION_LONG:
+        stop_loss_price = entry_price * (1 - stop_loss)
+        take_profit_price = entry_price * (1 + take_profit)
+        long_position = True
+        last_action = OPEN_LONG
+    else:
+        stop_loss_price = entry_price * (1 + stop_loss)
+        take_profit_price = entry_price * (1 - take_profit)
+        short_position = True
+        last_action = OPEN_SHORT
+
+    last_orders.append(
+        {
+            'symbol': s,
+            'entry_price': entry_price,
+            'last_action': last_action
+        }
+    )
+
+    print_log({
+        'Symbol': s,
+        'Time': current_time,
+        'Open': 'Long 🟢' if direction is DIRECTION_LONG else 'Short 🔴',
+        'Position Size': f'${position_size:,.2f}',
+        'Asset Size': f'{asset_size:.5f}',
+        'Entry Price': f'{entry_price:.5f}',
+        'Stop Loss Price': f'{stop_loss_price:.5f}',
+        'Take Profit Price': f'{take_profit_price:.5f}',
+        'Balance': f'${balance:,.2f}',
+    })
+
+
 def process_kline_event(s, df_data, event_data):
     global balance, trend, long_position, stop_loss_price, take_profit_price, touches, trailing_loses, loses, wins, \
         last_orders, entry_price, short_position, position_size, last_action, trades, asset_size, symbol_position
@@ -299,80 +345,23 @@ def process_kline_event(s, df_data, event_data):
         manage_opened_position(s, current_price, DIRECTION_SHORT)
         return
 
-    if not short_position and touches == 0 \
+    if not short_position and not long_position \
+            and touches == 0 \
             and current_price > df_data.ema1 \
             and current_price > df_data.ema2 \
             and current_price > df_data.ema3 \
             and actual_amplitude > 0 \
             and abs(actual_amplitude) >= ema1_amplitude:
-        symbol_position = s
-        entry_price = current_price
-        position_size = calculate_entry_position_size()
-        asset_size = position_size / entry_price
-        stop_loss_price = entry_price * (1 + stop_loss)
-        take_profit_price = entry_price * (1 - take_profit)
-        short_position = True
-        last_action = OPEN_SHORT
-        touches = 1
-        trades += 1
-        last_orders = []
-        last_orders.append(
-            {
-                'symbol': s,
-                'entry_price': entry_price,
-                'last_action': last_action
-            }
-        )
+        open_position(s, current_price, DIRECTION_SHORT)
 
-        print_log({
-            'Symbol': s,
-            'Time': current_time,
-            'Open': 'Short 🔴',
-            'Position Size': f'${position_size:,.2f}',
-            'Asset Size': f'{asset_size:.5f}',
-            'Entry Price': f'{entry_price:.5f}',
-            'Stop Loss Price': f'{stop_loss_price:.5f}',
-            'Take Profit Price': f'{take_profit_price:.5f}',
-            'Balance': f'${balance:,.2f}',
-        })
-
-    if not long_position and touches == 0 \
+    if not long_position and not short_position \
+            and touches == 0 \
             and current_price < df_data.ema1 \
             and current_price < df_data.ema2 \
             and current_price < df_data.ema3 \
             and actual_amplitude < 0 \
             and abs(actual_amplitude) >= ema1_amplitude:
-        symbol_position = s
-        entry_price = current_price
-        position_size = calculate_entry_position_size()
-        asset_size = position_size / entry_price
-        stop_loss_price = entry_price * (1 - stop_loss)
-        take_profit_price = entry_price * (1 + take_profit)
-        long_position = True
-        last_action = OPEN_LONG
-        touches = 1
-        trades += 1
-        last_orders = []
-        last_orders.append(
-            {
-                'symbol': s,
-                'entry_price': entry_price,
-                'last_action': last_action
-            }
-        )
-
-        print_log({
-            'Symbol': s,
-            'Time': current_time,
-            'Open': 'Long 🟢',
-            'Position Size': f'${position_size:,.2f}',
-            'Asset Size': f'{asset_size:.5f}',
-            'Entry Price': f'{entry_price:.5f}',
-            'Stop Loss Price': f'{stop_loss_price:.5f}',
-            'Take Profit Price': f'{take_profit_price:.5f}',
-            'Balance': f'${balance:,.2f}',
-        })
-        sys.stdout.flush()
+        open_position(s, current_price, DIRECTION_LONG)
 
 
 def handle_socket_message(event):
