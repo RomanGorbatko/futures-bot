@@ -36,6 +36,9 @@ else:
 low_risk_per_trade = .02
 high_risk_per_trade = .1
 
+taker_fee = .0004
+maker_fee = .0002
+
 leverage = 20
 stop_loss = .01  # 0.5%
 take_profit = .02  # 3%
@@ -61,6 +64,7 @@ stop_loss_price = 0
 take_profit_price = 0
 asset_size = 0
 position_size = 0
+position_fee = 0
 last_action = None
 trades = 0
 last_orders = []
@@ -71,7 +75,7 @@ loses = 0
 trailing_loses = 0
 
 df = {}
-symbols = ['APTUSDT', 'DYDXUSDT', 'ETCUSDT', 'MATICUSDT', 'ATOMUSDT', 'OPUSDT', 'IMXUSDT', 'AVAXUSDT']
+symbols = ['APTUSDT', 'DYDXUSDT', 'ANKRUSDT', 'MATICUSDT', 'ATOMUSDT', 'OPUSDT', 'IMXUSDT', 'AVAXUSDT']
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
 end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
@@ -114,18 +118,27 @@ def get_percentage_difference(num_a, num_b):
     return divided * 100
 
 
-def calculate_medium_order_entry():
-    return sum(item['entry_price'] for item in last_orders) / len(last_orders)
+def calculate_avg_order_entry():
+    return sum(item['position_size'] for item in last_orders) \
+           / sum(item['asset_size'] for item in last_orders)
+
+
+def calculate_taker_fee(size):
+    return size - (size * (1 - taker_fee))
 
 
 def calculate_entry_position_size(high_risk=False):
-    global position_size
+    global position_fee
 
     risk = high_risk_per_trade if high_risk else low_risk_per_trade
-    position_size = ((balance * risk) * leverage)
 
     # print(f"Risk: {risk * 100}%, Position: ${position_size:,.2f}")
-    return position_size
+    size = (balance * risk) * leverage
+    fee = calculate_taker_fee(size)
+
+    position_fee += fee
+
+    return size - fee
 
 
 def calculate_pnl(price, reverse=False):
@@ -178,7 +191,7 @@ def dump_to_csv(event_data):
 
 def close_position(s, pnl, direction):
     global long_position, short_position, trailing_loses, loses, wins, \
-        touches, position_size, asset_size, balance, symbol_position
+        touches, position_size, asset_size, balance, symbol_position, position_fee
 
     symbol_position = None
     if direction is DIRECTION_LONG:
@@ -194,16 +207,19 @@ def close_position(s, pnl, direction):
     else:
         wins += 1
 
+    fee = calculate_taker_fee(position_size)
+    position_fee += fee
+
     touches = 0
     position_size = 0
     asset_size = 0
 
-    balance += pnl
+    balance += (pnl - position_fee)
 
 
 def manage_opened_position(s, current_price, direction):
     global stop_loss_price, take_profit_price, touches, long_position, trailing_loses, loses, position_size, \
-        asset_size, balance, entry_price, wins, short_position
+        asset_size, balance, entry_price, wins, short_position, position_fee
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -220,17 +236,23 @@ def manage_opened_position(s, current_price, direction):
     else:  # take profits
         if touches <= max_trailing_takes:  # trailing
             last_action_increase = INCREASE_LONG if direction is DIRECTION_LONG else INCREASE_SHORT
+            increase_position_size = calculate_entry_position_size(True)
+            increase_asset_size = increase_position_size / current_price
+
             last_orders.append(
                 {
+                    'symbol': s,
+                    'last_action': last_action_increase,
                     'entry_price': current_price,
-                    'last_action': last_action_increase
+                    'asset_size': increase_asset_size,
+                    'position_size': increase_position_size,
                 }
             )
 
             touches += 1
-            entry_price = calculate_medium_order_entry()
-            position_size += calculate_entry_position_size(True)
-            asset_size = position_size / entry_price
+            entry_price = calculate_avg_order_entry()
+            position_size += increase_position_size
+            asset_size += increase_asset_size
 
             if direction is DIRECTION_LONG:
                 stop_loss_price = entry_price * (1 - trailing_stop_loss)
@@ -243,8 +265,8 @@ def manage_opened_position(s, current_price, direction):
                 'Symbol': s,
                 'Time': current_time,
                 f'Increase {direction}': touches - 1,
-                'Position Size': f'{position_size:,.2f}',
-                'Asset Size': f'{asset_size:.3f}',
+                'Position Size': f'${position_size:,.4f}',
+                'Asset Size': f'{asset_size:.4f}',
                 'Entry Price': f'{entry_price:.5f}',
                 'Stop Loss Price': f'{stop_loss_price:.5f}',
                 'Take Profit Price': f'{take_profit_price:.5f}',
@@ -258,11 +280,14 @@ def manage_opened_position(s, current_price, direction):
         'Symbol': s,
         'Time': current_time,
         'Close': f'{direction} 🔵️',
-        'Pnl': f'${pnl:,.2f}',
+        'Clear Pnl': f'${pnl:,.4f}',
+        'Fee': f'${position_fee:,.4f}',
         'Entry Price': f'{entry_price:.5f}',
         'Exit Price': f'{exit_price:.5f}',
-        'Balance': f'${balance:,.2f}',
+        'Balance': f'${balance:,.4f}',
     })
+
+    position_fee = 0
 
 
 def open_position(s, current_price, direction):
@@ -293,8 +318,11 @@ def open_position(s, current_price, direction):
     last_orders.append(
         {
             'symbol': s,
+            'last_action': last_action,
+
             'entry_price': entry_price,
-            'last_action': last_action
+            'asset_size': asset_size,
+            'position_size': position_size,
         }
     )
 
@@ -302,12 +330,12 @@ def open_position(s, current_price, direction):
         'Symbol': s,
         'Time': current_time,
         'Open': 'Long 🟢' if direction is DIRECTION_LONG else 'Short 🔴',
-        'Position Size': f'${position_size:,.2f}',
-        'Asset Size': f'{asset_size:.5f}',
+        'Position Size': f'${position_size:,.4f}',
+        'Asset Size': f'{asset_size:.4f}',
         'Entry Price': f'{entry_price:.5f}',
         'Stop Loss Price': f'{stop_loss_price:.5f}',
         'Take Profit Price': f'{take_profit_price:.5f}',
-        'Balance': f'${balance:,.2f}',
+        'Balance': f'${balance:,.4f}',
     })
 
 
