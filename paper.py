@@ -39,9 +39,9 @@ high_risk_per_trade = .1
 taker_fee = .0004
 maker_fee = .0002
 
-leverage = 20
-stop_loss = .01  # 0.5%
-take_profit = .02  # 3%
+leverage = 100
+stop_loss = .01  # 1%
+take_profit = .015  # 1.5%
 trailing_stop_loss = .005  # 0.5%
 trailing_take_profit = .01  # 0.5%
 max_trailing_takes = 2
@@ -75,7 +75,7 @@ loses = 0
 trailing_loses = 0
 
 df = {}
-symbols = ['APTUSDT', 'DYDXUSDT', 'ANKRUSDT', 'MATICUSDT', 'ATOMUSDT', 'OPUSDT', 'IMXUSDT', 'AVAXUSDT']
+symbols = ['APTUSDT', 'DYDXUSDT', 'ANKRUSDT', 'AAVEUSDT', 'ATOMUSDT', 'OPUSDT', 'IMXUSDT', 'AVAXUSDT']
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
 end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
