@@ -40,9 +40,9 @@ taker_fee = .0004
 maker_fee = .0002
 
 leverage = 100
-stop_loss = .01  # 1%
+stop_loss = .005  # 1%
 take_profit = .015  # 1.5%
-trailing_stop_loss = .005  # 0.5%
+trailing_stop_loss = .01  # 0.5%
 trailing_take_profit = .01  # 0.5%
 max_trailing_takes = 2
 touches = 0
@@ -75,7 +75,13 @@ loses = 0
 trailing_loses = 0
 
 df = {}
-symbols = ['APTUSDT', 'DYDXUSDT', 'ANKRUSDT', 'AAVEUSDT', 'ATOMUSDT', 'OPUSDT', 'IMXUSDT', 'AVAXUSDT']
+symbols = [
+    'APTUSDT', 'DYDXUSDT', 'ANKRUSDT',
+    'AAVEUSDT', 'ATOMUSDT', 'OPUSDT',
+    'APEUSDT', 'AVAXUSDT', '1000SHIBUSDT',
+    'CHRUSDT', 'NEARUSDT', 'IMXUSDT',
+    'CHZUSDT', 
+]
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
 end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
@@ -438,20 +444,20 @@ def update_dataframe(skip_timer=False):
             client = create_client()
 
 
-print_log({
-    'Balance': f'${balance:,.2f}',
-    'Start Time': start_time,
-    'End Time': end_time,
-    'Interval': interval,
-    'Low Risk Per Trade': f"{low_risk_per_trade * 100}%",
-    'High Risk Per Trade': f"{high_risk_per_trade * 100}%",
-    'Leverage': leverage,
-    'Stop Loss': f"{stop_loss * 100}%",
-    'Take Profit': f"{take_profit * 100}%",
-    'Trailing Stop Loss': f"{trailing_stop_loss * 100}%",
-    'Trailing Take Profit': f"{trailing_take_profit * 100}%",
-    'Max Trailing Take Profit': max_trailing_takes,
-})
+# print_log({
+#     'Balance': f'${balance:,.2f}',
+#     'Start Time': start_time,
+#     'End Time': end_time,
+#     'Interval': interval,
+#     'Low Risk Per Trade': f"{low_risk_per_trade * 100}%",
+#     'High Risk Per Trade': f"{high_risk_per_trade * 100}%",
+#     'Leverage': leverage,
+#     'Stop Loss': f"{stop_loss * 100}%",
+#     'Take Profit': f"{take_profit * 100}%",
+#     'Trailing Stop Loss': f"{trailing_stop_loss * 100}%",
+#     'Trailing Take Profit': f"{trailing_take_profit * 100}%",
+#     'Max Trailing Take Profit': max_trailing_takes,
+# })
 
 client = create_client()
 
