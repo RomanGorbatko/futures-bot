@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta
 import os.path
 import sys
+import json
 
 import pandas as pd
 import requests
@@ -108,7 +109,19 @@ def print_log(data, pt=None):
 
 
 def create_client():
+    if os.getenv('BINANCE_API_KEY') and os.getenv('BINANCE_API_SECRET'):
+        return Client(os.getenv('BINANCE_API_KEY'), os.getenv('BINANCE_API_SECRET'))
+
     return Client()
+
+
+def setup_binance():
+    global balance
+    info = client.futures_account_balance()
+
+    *_, usdt_balance = filter(lambda d: d['asset'] == 'USDT', info)
+
+    balance = float(usdt_balance['balance'])
 
 
 def get_percentage_difference(num_a, num_b):
@@ -460,6 +473,7 @@ def update_dataframe(skip_timer=False):
 # })
 
 client = create_client()
+setup_binance()
 
 for symbol in symbols:
     df[symbol] = get_dataframe(symbol, interval, start_time, end_time)
