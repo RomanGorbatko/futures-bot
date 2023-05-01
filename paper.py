@@ -589,24 +589,21 @@ def update_dataframe(skip_timer=False):
 
             client = create_client()
 
-
-# print_log({
-#     'Balance': f'${balance:,.2f}',
-#     'Start Time': start_time,
-#     'End Time': end_time,
-#     'Interval': interval,
-#     'Low Risk Per Trade': f"{low_risk_per_trade * 100}%",
-#     'High Risk Per Trade': f"{high_risk_per_trade * 100}%",
-#     'Leverage': leverage,
-#     'Stop Loss': f"{stop_loss * 100}%",
-#     'Take Profit': f"{take_profit * 100}%",
-#     'Trailing Stop Loss': f"{trailing_stop_loss * 100}%",
-#     'Trailing Take Profit': f"{trailing_take_profit * 100}%",
-#     'Max Trailing Take Profit': max_trailing_takes,
-# })
-
 client = create_client()
 setup_binance()
+
+print_log({
+    'Balance': f'${balance:,.2f}',
+    'Start Time': start_time,
+    'Interval': interval,
+    'Low Risk Per Trade': f"{low_risk_per_trade * 100}%",
+    'High Risk Per Trade': f"{high_risk_per_trade * 100}%",
+    'Stop Loss': f"{stop_loss * 100}%",
+    'Take Profit': f"{take_profit * 100}%",
+    'Trailing Stop Loss': f"{trailing_stop_loss * 100}%",
+    'Trailing Take Profit': f"{trailing_take_profit * 100}%",
+    'Max Trailing Take Profit': max_trailing_takes,
+})
 
 for symbol in symbols:
     df[symbol] = get_dataframe(symbol, interval, start_time, end_time)
