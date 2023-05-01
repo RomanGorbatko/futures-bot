@@ -75,14 +75,20 @@ wins = 0
 loses = 0
 trailing_loses = 0
 
+last_stop_loss_order_id = 0
+last_take_profit_order_id = 0
+
 df = {}
 symbols = [
     'APTUSDT', 'DYDXUSDT', 'ANKRUSDT',
-    'AAVEUSDT', 'ATOMUSDT', 'OPUSDT',
+    'OPUSDT', 'MATICUSDT', 'DOTUSDT',
     'APEUSDT', 'AVAXUSDT', '1000SHIBUSDT',
-    'CHRUSDT', 'NEARUSDT', 'IMXUSDT',
-    'CHZUSDT', 
+    'CHRUSDT', 'IMXUSDT',
+    'CHZUSDT', 'BNBUSDT', 'INJUSDT'
+
+    # 'AAVEUSDT', 'NEARUSDT', 'ATOMUSDT',
 ]
+symbols_settings = {}
 interval = Client.KLINE_INTERVAL_1MINUTE
 start_time = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d 00:00:00')  # Yesterday time
 end_time = time.strftime('%Y-%m-%d %H:%M:%S')  # Current time
@@ -115,13 +121,71 @@ def create_client():
     return Client()
 
 
-def setup_binance():
+def update_current_balance():
     global balance
     info = client.futures_account_balance()
 
     *_, usdt_balance = filter(lambda d: d['asset'] == 'USDT', info)
 
     balance = float(usdt_balance['balance'])
+
+
+def update_leverage():
+    global symbols_settings
+
+    info = client.futures_leverage_bracket()
+
+    for s in symbols:
+        *_, leverage_info = filter(lambda d: d['symbol'] == s, info)
+        leverage_info['brackets'].sort(key=lambda x: x['initialLeverage'], reverse=True)
+
+        if s not in symbols_settings:
+            symbols_settings[s] = {}
+
+        # comment below line to disable
+        # leverage_info['brackets'][0]['initialLeverage'] = 2
+
+        symbols_settings[s]['leverage'] = leverage_info['brackets'][0]
+
+        print(s, get_symbol_leverage(s))
+
+        client.futures_change_leverage(
+            symbol=s,
+            # leverage=2
+            leverage=symbols_settings[s]['leverage']['initialLeverage']
+        )
+
+
+def setup_symbols_settings():
+    global symbols_settings
+
+    futures_info = client.futures_exchange_info()
+
+    for s in symbols:
+        *_, symbol_info = filter(lambda d: d['symbol'] == s, futures_info['symbols'])
+
+        if s not in symbols_settings:
+            symbols_settings[s] = {}
+
+        symbols_settings[s]['info'] = symbol_info
+
+
+def setup_binance():
+    update_current_balance()
+    update_leverage()
+    setup_symbols_settings()
+
+
+def get_symbol_leverage(s):
+    return symbols_settings[s]['leverage']['initialLeverage']
+
+
+def get_symbol_quantity_precision(s):
+    return symbols_settings[s]['info']['quantityPrecision']
+
+
+def get_symbol_price_precision(s):
+    return symbols_settings[s]['info']['pricePrecision']
 
 
 def get_percentage_difference(num_a, num_b):
@@ -146,13 +210,17 @@ def calculate_taker_fee(size):
     return size - (size * (1 - taker_fee))
 
 
-def calculate_entry_position_size(high_risk=False):
+def calculate_maker_fee(size):
+    return size - (size * (1 - maker_fee))
+
+
+def calculate_entry_position_size(s, high_risk=False):
     global position_fee
 
     risk = high_risk_per_trade if high_risk else low_risk_per_trade
 
     # print(f"Risk: {risk * 100}%, Position: ${position_size:,.2f}")
-    size = (balance * risk) * leverage
+    size = (balance * risk) * get_symbol_leverage(s)
     fee = calculate_taker_fee(size)
 
     position_fee += fee
@@ -210,7 +278,8 @@ def dump_to_csv(event_data):
 
 def close_position(s, pnl, direction):
     global long_position, short_position, trailing_loses, loses, wins, \
-        touches, position_size, asset_size, balance, symbol_position, position_fee
+        touches, position_size, asset_size, balance, symbol_position, position_fee, \
+        last_stop_loss_order_id, last_take_profit_order_id
 
     symbol_position = None
     if direction is DIRECTION_LONG:
@@ -226,19 +295,22 @@ def close_position(s, pnl, direction):
     else:
         wins += 1
 
-    fee = calculate_taker_fee(position_size)
+    fee = calculate_maker_fee(position_size)
     position_fee += fee
 
     touches = 0
     position_size = 0
     asset_size = 0
+    last_stop_loss_order_id = 0
+    last_take_profit_order_id = 0
 
     balance += (pnl - position_fee)
 
 
 def manage_opened_position(s, current_price, direction):
     global stop_loss_price, take_profit_price, touches, long_position, trailing_loses, loses, position_size, \
-        asset_size, balance, entry_price, wins, short_position, position_fee
+        asset_size, balance, entry_price, wins, short_position, position_fee, last_stop_loss_order_id, \
+        last_take_profit_order_id
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -255,7 +327,7 @@ def manage_opened_position(s, current_price, direction):
     else:  # take profits
         if touches <= max_trailing_takes:  # trailing
             last_action_increase = INCREASE_LONG if direction is DIRECTION_LONG else INCREASE_SHORT
-            increase_position_size = calculate_entry_position_size(True)
+            increase_position_size = calculate_entry_position_size(s, True)
             increase_asset_size = increase_position_size / current_price
 
             last_orders.append(
@@ -270,8 +342,21 @@ def manage_opened_position(s, current_price, direction):
 
             touches += 1
             entry_price = calculate_avg_order_entry()
+
+            # print('entry_price calculate_avg_order_entry', entry_price)
+            client.futures_create_order(
+                symbol=s,
+                side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
+                type=Client.ORDER_TYPE_MARKET,
+                quantity=round(increase_asset_size, get_symbol_quantity_precision(s)),
+            )
+            position = client.futures_position_information(symbol=s)[0]
+            entry_price = float(position['entryPrice'])
+
             position_size += increase_position_size
             asset_size += increase_asset_size
+
+            # print('entry_price position', entry_price)
 
             if direction is DIRECTION_LONG:
                 stop_loss_price = entry_price * (1 - trailing_stop_loss)
@@ -279,6 +364,31 @@ def manage_opened_position(s, current_price, direction):
             else:
                 stop_loss_price = entry_price * (1 + trailing_stop_loss)
                 take_profit_price = entry_price * (1 - trailing_take_profit)
+
+            client.futures_cancel_order(symbol=s, orderId=last_stop_loss_order_id)
+
+            stop_order = client.futures_create_order(
+                symbol=s,
+                side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
+                type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
+                closePosition='true',
+                stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
+                workingType='MARK_PRICE'
+            )
+
+            last_stop_loss_order_id = stop_order['orderId']
+
+            if (touches - 1) == 2:
+                stop_order = client.futures_create_order(
+                    symbol=s,
+                    side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
+                    type=Client.FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET,
+                    closePosition='true',
+                    stopPrice=round(take_profit_price, get_symbol_price_precision(s)),
+                    workingType='MARK_PRICE'
+                )
+
+                last_take_profit_order_id = stop_order['orderId']
 
             print_log({
                 'Symbol': s,
@@ -311,14 +421,29 @@ def manage_opened_position(s, current_price, direction):
 
 def open_position(s, current_price, direction):
     global symbol_position, entry_price, position_size, asset_size, stop_loss_price, take_profit_price, long_position, \
-        last_action, touches, trades, last_orders, short_position
+        last_action, touches, trades, last_orders, short_position, last_stop_loss_order_id
+
+    if direction is DIRECTION_LONG:
+        long_position = True
+    else:
+        short_position = True
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
 
     symbol_position = s
     entry_price = current_price
-    position_size = calculate_entry_position_size()
+    position_size = calculate_entry_position_size(s)
     asset_size = position_size / entry_price
+
+    client.futures_create_order(
+        symbol=s,
+        side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
+        type=Client.ORDER_TYPE_MARKET,
+        quantity=round(asset_size, get_symbol_quantity_precision(s)),
+    )
+    position = client.futures_position_information(symbol=s)[0]
+    entry_price = float(position['entryPrice'])
+
     touches = 1
     trades += 1
     last_orders = []
@@ -326,19 +451,27 @@ def open_position(s, current_price, direction):
     if direction is DIRECTION_LONG:
         stop_loss_price = entry_price * (1 - stop_loss)
         take_profit_price = entry_price * (1 + take_profit)
-        long_position = True
         last_action = OPEN_LONG
     else:
         stop_loss_price = entry_price * (1 + stop_loss)
         take_profit_price = entry_price * (1 - take_profit)
-        short_position = True
         last_action = OPEN_SHORT
+
+    stop_order = client.futures_create_order(
+        symbol=s,
+        side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
+        type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
+        closePosition='true',
+        stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
+        workingType='MARK_PRICE'
+    )
+
+    last_stop_loss_order_id = stop_order['orderId']
 
     last_orders.append(
         {
             'symbol': s,
             'last_action': last_action,
-
             'entry_price': entry_price,
             'asset_size': asset_size,
             'position_size': position_size,
