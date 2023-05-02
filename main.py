@@ -3,7 +3,6 @@ import time
 from datetime import datetime, timedelta
 import os.path
 import sys
-import json
 
 import pandas as pd
 import requests
@@ -29,10 +28,8 @@ INCREASE_SHORT = 'increase_short'
 DIRECTION_LONG = 'Long'
 DIRECTION_SHORT = 'Short'
 
-if len(sys.argv) > 1:
-    balance = starting_balance = float(sys.argv[1])
-else:
-    balance = starting_balance = 500
+balance = starting_balance = float(os.getenv('BALANCE')) if os.getenv('BALANCE') else 500.
+live = bool(os.getenv('LIVE')) if os.getenv('LIVE') is not None and os.getenv('LIVE') == 'True' else False
 
 low_risk_per_trade = .02
 high_risk_per_trade = .1
@@ -40,7 +37,7 @@ high_risk_per_trade = .1
 taker_fee = .0004
 maker_fee = .0002
 
-leverage = 100
+paper_leverage = 100
 stop_loss = .005  # 1%
 take_profit = .015  # 1.5%
 trailing_stop_loss = .01  # 0.5%
@@ -83,10 +80,14 @@ symbols = [
     'APTUSDT', 'DYDXUSDT', 'ANKRUSDT',
     'OPUSDT', 'MATICUSDT', 'DOTUSDT',
     'APEUSDT', 'AVAXUSDT', '1000SHIBUSDT',
-    'CHRUSDT', 'IMXUSDT',
-    'CHZUSDT', 'BNBUSDT', 'INJUSDT'
+    'IMXUSDT', 'LINKUSDT', 'GALAUSDT',
+    'BNBUSDT', 'INJUSDT', 'FILUSDT',
+    'SOLUSDT', 'FLMUSDT', 'FTMUSDT',
+    'ETCUSDT', 'TRXUSDT', 'LTCUSDT',
+    'MANAUSDT', 'LDOUSDT', 'XRPUSDT',
+    'ADAUSDT'
 
-    # 'AAVEUSDT', 'NEARUSDT', 'ATOMUSDT',
+    # 'AAVEUSDT', 'NEARUSDT', 'ATOMUSDT', 'DOGEUSDT',
 ]
 symbols_settings = {}
 interval = Client.KLINE_INTERVAL_1MINUTE
@@ -177,6 +178,9 @@ def setup_binance():
 
 
 def get_symbol_leverage(s):
+    if not live:
+        return paper_leverage
+
     return symbols_settings[s]['leverage']['initialLeverage']
 
 
@@ -344,14 +348,15 @@ def manage_opened_position(s, current_price, direction):
             entry_price = calculate_avg_order_entry()
 
             # print('entry_price calculate_avg_order_entry', entry_price)
-            client.futures_create_order(
-                symbol=s,
-                side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
-                type=Client.ORDER_TYPE_MARKET,
-                quantity=round(increase_asset_size, get_symbol_quantity_precision(s)),
-            )
-            position = client.futures_position_information(symbol=s)[0]
-            entry_price = float(position['entryPrice'])
+            if live:
+                client.futures_create_order(
+                    symbol=s,
+                    side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
+                    type=Client.ORDER_TYPE_MARKET,
+                    quantity=round(increase_asset_size, get_symbol_quantity_precision(s)),
+                )
+                position = client.futures_position_information(symbol=s)[0]
+                entry_price = float(position['entryPrice'])
 
             position_size += increase_position_size
             asset_size += increase_asset_size
@@ -365,30 +370,31 @@ def manage_opened_position(s, current_price, direction):
                 stop_loss_price = entry_price * (1 + trailing_stop_loss)
                 take_profit_price = entry_price * (1 - trailing_take_profit)
 
-            client.futures_cancel_order(symbol=s, orderId=last_stop_loss_order_id)
+            if live:
+                client.futures_cancel_order(symbol=s, orderId=last_stop_loss_order_id)
 
-            stop_order = client.futures_create_order(
-                symbol=s,
-                side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
-                type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
-                closePosition='true',
-                stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
-                workingType='MARK_PRICE'
-            )
-
-            last_stop_loss_order_id = stop_order['orderId']
-
-            if (touches - 1) == 2:
                 stop_order = client.futures_create_order(
                     symbol=s,
-                    side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
-                    type=Client.FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET,
+                    side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
+                    type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
                     closePosition='true',
-                    stopPrice=round(take_profit_price, get_symbol_price_precision(s)),
+                    stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
                     workingType='MARK_PRICE'
                 )
 
-                last_take_profit_order_id = stop_order['orderId']
+                last_stop_loss_order_id = stop_order['orderId']
+
+                if (touches - 1) == 2:
+                    stop_order = client.futures_create_order(
+                        symbol=s,
+                        side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
+                        type=Client.FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET,
+                        closePosition='true',
+                        stopPrice=round(take_profit_price, get_symbol_price_precision(s)),
+                        workingType='MARK_PRICE'
+                    )
+
+                    last_take_profit_order_id = stop_order['orderId']
 
             print_log({
                 'Symbol': s,
@@ -435,14 +441,15 @@ def open_position(s, current_price, direction):
     position_size = calculate_entry_position_size(s)
     asset_size = position_size / entry_price
 
-    client.futures_create_order(
-        symbol=s,
-        side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
-        type=Client.ORDER_TYPE_MARKET,
-        quantity=round(asset_size, get_symbol_quantity_precision(s)),
-    )
-    position = client.futures_position_information(symbol=s)[0]
-    entry_price = float(position['entryPrice'])
+    if live:
+        client.futures_create_order(
+            symbol=s,
+            side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
+            type=Client.ORDER_TYPE_MARKET,
+            quantity=round(asset_size, get_symbol_quantity_precision(s)),
+        )
+        position = client.futures_position_information(symbol=s)[0]
+        entry_price = float(position['entryPrice'])
 
     touches = 1
     trades += 1
@@ -457,16 +464,17 @@ def open_position(s, current_price, direction):
         take_profit_price = entry_price * (1 - take_profit)
         last_action = OPEN_SHORT
 
-    stop_order = client.futures_create_order(
-        symbol=s,
-        side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
-        type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
-        closePosition='true',
-        stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
-        workingType='MARK_PRICE'
-    )
+    if live:
+        stop_order = client.futures_create_order(
+            symbol=s,
+            side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
+            type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
+            closePosition='true',
+            stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
+            workingType='MARK_PRICE'
+        )
 
-    last_stop_loss_order_id = stop_order['orderId']
+        last_stop_loss_order_id = stop_order['orderId']
 
     last_orders.append(
         {
@@ -508,9 +516,10 @@ def process_kline_event(s, df_data, event_data):
 
     current_price = float(event_data.close)
     actual_amplitude = get_percentage_difference(current_price, df_data.ema2)
+    is_amplitude_valid = abs(actual_amplitude) >= ema1_amplitude
 
     # print(f"Symbol: {s}, Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Actual "
-    #       f"Amplitude: {actual_amplitude}")
+    #       f"Amplitude: {abs(actual_amplitude)}, Is Amplitude Valid: {is_amplitude_valid}")
 
     # reason to long exit
     if long_position \
@@ -531,7 +540,7 @@ def process_kline_event(s, df_data, event_data):
             and current_price > df_data.ema2 \
             and current_price > df_data.ema3 \
             and actual_amplitude > 0 \
-            and abs(actual_amplitude) >= ema1_amplitude:
+            and is_amplitude_valid:
         open_position(s, current_price, DIRECTION_SHORT)
 
     if not long_position and not short_position \
@@ -540,7 +549,7 @@ def process_kline_event(s, df_data, event_data):
             and current_price < df_data.ema2 \
             and current_price < df_data.ema3 \
             and actual_amplitude < 0 \
-            and abs(actual_amplitude) >= ema1_amplitude:
+            and is_amplitude_valid:
         open_position(s, current_price, DIRECTION_LONG)
 
 
@@ -572,16 +581,16 @@ def update_dataframe(skip_timer=False):
     previous_minute = (datetime.now() - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
     current_minute = time.strftime('%Y-%m-%d %H:%M:%S')
 
-    for symbol in symbols:
+    for s in symbols:
         try:
-            fresh_df = get_dataframe(symbol, interval, previous_minute, current_minute)
+            fresh_df = get_dataframe(s, interval, previous_minute, current_minute)
 
             index = fresh_df.first_valid_index()
-            if index in df[symbol].index:
-                df[symbol].drop(index, inplace=True)
+            if index in df[s].index:
+                df[s].drop(index, inplace=True)
 
-            df[symbol] = pd.concat([df[symbol], fresh_df])
-            fix_dataframe_index(symbol)
+            df[s] = pd.concat([df[s], fresh_df])
+            fix_dataframe_index(s)
         except ReadTimeout as re:
             print(f"Time: {current_minute}, Exception ❗ Type: ReadTimeout")
         except BinanceAPIException as bae:
@@ -589,8 +598,10 @@ def update_dataframe(skip_timer=False):
 
             client = create_client()
 
+
 client = create_client()
-setup_binance()
+if live:
+    setup_binance()
 
 print_log({
     'Balance': f'${balance:,.2f}',
