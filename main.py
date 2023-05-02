@@ -1,3 +1,4 @@
+import csv
 import threading
 import time
 from datetime import datetime, timedelta
@@ -18,7 +19,7 @@ load_dotenv()
 ENV = os.getenv('ENV') or 'local'
 
 os.environ['TZ'] = 'UTC'
-event_log = 'event.csv'
+event_log = 'logs/{0}.csv'
 
 OPEN_LONG = 'open_long'
 OPEN_SHORT = 'open_short'
@@ -30,6 +31,7 @@ DIRECTION_SHORT = 'Short'
 
 balance = starting_balance = float(os.getenv('BALANCE')) if os.getenv('BALANCE') else 500.
 live = bool(os.getenv('LIVE')) if os.getenv('LIVE') is not None and os.getenv('LIVE') == 'True' else False
+should_dump_to_csv = bool(os.getenv('DUMP_TO_CSV')) if os.getenv('DUMP_TO_CSV') is not None and os.getenv('DUMP_TO_CSV') == 'True' else False
 
 low_risk_per_trade = .02
 high_risk_per_trade = .1
@@ -262,22 +264,24 @@ def fix_dataframe_index(s):
     # df["ema3_amplitude"] = get_percentage_difference(df["close"], df["ema3"])
 
 
-def dump_to_csv(event_data):
-    # dump_header = event_df_columns
-    # dump_header.remove('interval')
+def dump_to_csv(s, event_data, current_price):
+    row = event_data.values.tolist()
+    row.append(current_price)
 
-    # print(dump_header)
-    # print(event_data.columns)
-    # print(dump_header, list(event_data.columns))
-    # if file does not exist write header
-    if not os.path.isfile(event_log):
-        event_data.to_csv(event_log, index=False, header=[
-            'kline_start_time', 'kline_close_time', 'first_trade_id', 'last_trade_id', 'open', 'close',
-            'high', 'low', 'volume', 'number_of_trades', 'is_closed', 'quote_asset_volume', 'taker_buy_volume',
-            'taker_buy_quote_asset_volume', 'ignore'
-        ])
-    else:  # else it exists so append without writing the header
-        event_data.to_csv(event_log, index=False, header=False, mode='a')
+    headers = [
+        'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'trades',
+        'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore', 'ema1', 'ema2', 'ema3',
+        'current_price'
+    ]
+
+    if not os.path.isfile(event_log.format(s)):
+        with open(event_log.format(s), 'w', newline='') as out_csv:
+            writer = csv.DictWriter(out_csv, fieldnames=headers, delimiter=',', lineterminator='\n')
+            writer.writeheader()
+    else:
+        with open(event_log.format(s), 'a', newline='') as out_csv:
+            writer = csv.writer(out_csv, delimiter=',', lineterminator='\n')
+            writer.writerow(row)
 
 
 def close_position(s, pnl, direction):
@@ -518,6 +522,9 @@ def process_kline_event(s, df_data, event_data):
     actual_amplitude = get_percentage_difference(current_price, df_data.ema2)
     is_amplitude_valid = abs(actual_amplitude) >= ema1_amplitude
 
+    if should_dump_to_csv:
+        dump_to_csv(s, df_data, current_price)
+
     # print(f"Symbol: {s}, Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, Ema3: {df_data.ema3}, Actual "
     #       f"Amplitude: {abs(actual_amplitude)}, Is Amplitude Valid: {is_amplitude_valid}")
 
@@ -568,7 +575,6 @@ def handle_socket_message(event):
     df_data = df[s].iloc[-1]
     event_data = event_df.iloc[0]
 
-    # dump_to_csv(event_df)
     process_kline_event(s, df_data, event_data)
 
 
