@@ -49,7 +49,7 @@ max_trailing_takes = 2
 touches = 0
 
 ema1_length = 9
-ema1_amplitude = 2
+ema1_amplitude = 2.5
 
 ema2_length = 20
 ema2_amplitude = 2.5
