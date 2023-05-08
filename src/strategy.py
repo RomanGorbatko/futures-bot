@@ -107,6 +107,7 @@ class Strategy:
             self.client = binance.Client(
                 os.getenv("BINANCE_API_KEY"), os.getenv("BINANCE_API_SECRET")
             )
+            return
 
         self.client = binance.Client()
 
