@@ -63,7 +63,7 @@ class Strategy:
 
         *_, usdt_balance = filter(lambda d: d['asset'] == 'USDT', info)
 
-        balance = float(usdt_balance['balance'])
+        self.account.balance = float(usdt_balance['balance'])
 
     def update_leverage(self):
         info = self.client.futures_leverage_bracket()
