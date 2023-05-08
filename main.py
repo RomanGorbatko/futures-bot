@@ -159,7 +159,7 @@ def update_dataframe(skip_timer=False):
 
 strategy.utils.print_log(
     {
-        "Balance": f"${balance:,.2f}",
+        "Balance": f"${strategy.account.balance:,.2f}",
         "Start Time": start_time,
         "Interval": interval,
         "Low Risk Per Trade": f"{setting.low_risk_per_trade * 100}%",
