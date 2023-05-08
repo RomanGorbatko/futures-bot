@@ -1,6 +1,8 @@
 import csv
+import datetime
 import glob
 import os
+import time
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -24,12 +26,29 @@ logs_path = 'logs'
 os.chdir(logs_path)
 log_files = glob.glob('*.{}'.format('csv'))
 
+from_date = None
+# from_date = "05-05-2023 00:00:01"
+
+# strategy.setting.ema1_amplitude = 2.25
+# strategy.setting.ema2_amplitude = 2.25
+# strategy.setting.take_profit = 0.02
+# strategy.setting.max_trailing_takes = 3
+
+strategy.setting.use_trailing_entry = False
+strategy.setting.trailing_amplitude_diff = 10
+
+if from_date:
+    from_date = time.mktime(
+        datetime.datetime.strptime(from_date, "%d-%m-%Y %H:%M:%S").timetuple()
+    ) * 1000
+
 for file in log_files:
     symbol = file[:-4]
 
-    # if symbol != 'FILUSDT' and symbol != 'APTUSDT':
-    #     continue
+    if symbol != 'APTUSDT':
+        continue
 
+    print(f'Processing symbol {symbol}')
     try:
         with open(file, 'r') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
@@ -43,8 +62,14 @@ for file in log_files:
                 df = pd.DataFrame([row], columns=header)
                 df_data = df.iloc[0]
 
+                if from_date:
+                    if float(df_data.close_time) < from_date:
+                        continue
+
                 strategy.process_kline_event(symbol, df_data, float(df_data['current_price']))
     except FileNotFoundError as re:
         print(re)
 
-    # exit()
+print(f'Wins: {strategy.setting.wins}')
+print(f'Loses: {strategy.setting.loses}')
+print(f'Trailing Loses: {strategy.setting.trailing_loses}')

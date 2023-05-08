@@ -14,14 +14,7 @@ class Setting:
     trailing_take_profit = 0.01  # 0.5%
     max_trailing_takes = 2
 
-    ema1_length = 9
-    ema1_amplitude = 2
-
-    ema2_length = 20
-    ema2_amplitude = 2.5
-
-    ema3_length = 50
-    ema3_amplitude = 2.5
+    ema_amplitude = 2
 
     touches = 0
     wins = 0
@@ -41,6 +34,10 @@ class Setting:
 
     symbols_settings = {}
 
+    use_trailing_entry = False
+    trailing_amplitude_diff = 15
+    amplitude_manager = {}
+
     symbols = [
         'APTUSDT', 'DYDXUSDT', 'ANKRUSDT',
         'OPUSDT', 'MATICUSDT', 'DOTUSDT',
@@ -50,9 +47,9 @@ class Setting:
         'SOLUSDT', 'FLMUSDT', 'FTMUSDT',
         'ETCUSDT', 'TRXUSDT', 'LTCUSDT',
         'MANAUSDT', 'LDOUSDT', 'XRPUSDT',
-        'ADAUSDT', 'ATOMUSDT', 'DOGEUSDT'
+        'ADAUSDT', 'ATOMUSDT', 'DOGEUSDT',
 
-        # 'AAVEUSDT', 'NEARUSDT',
+        'AAVEUSDT', 'NEARUSDT',
     ]
 
     def __init__(self):

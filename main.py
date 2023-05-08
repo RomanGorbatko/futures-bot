@@ -5,7 +5,7 @@ import os.path
 
 import pandas as pd
 from dotenv import load_dotenv
-from pandas_ta import ema, rsi, psar
+from pandas_ta import ema, rsi, psar, atr, wma
 from binance.exceptions import BinanceAPIException
 from binance.client import Client
 from binance import ThreadedWebsocketManager
@@ -67,9 +67,30 @@ def get_dataframe(s, i, st, et):
 
 
 def fix_dataframe_index(s):
-    df[s]["ema1"] = ema(df[s]["close"], length=strategy.setting.ema1_length)
-    df[s]["ema2"] = ema(df[s]["close"], length=strategy.setting.ema2_length)
-    df[s]["ema3"] = ema(df[s]["close"], length=strategy.setting.ema3_length)
+    df[s]["ema5"] = ema(df[s]["close"], length=5)
+    df[s]["ema9"] = ema(df[s]["close"], length=9)
+    df[s]["ema10"] = ema(df[s]["close"], length=10)
+    df[s]["ema15"] = ema(df[s]["close"], length=15)
+    df[s]["ema20"] = ema(df[s]["close"], length=20)
+    df[s]["ema25"] = ema(df[s]["close"], length=25)
+    df[s]["ema30"] = ema(df[s]["close"], length=30)
+    df[s]["ema35"] = ema(df[s]["close"], length=35)
+    df[s]["ema40"] = ema(df[s]["close"], length=40)
+    df[s]["ema45"] = ema(df[s]["close"], length=45)
+    df[s]["ema50"] = ema(df[s]["close"], length=50)
+    df[s]["ema55"] = ema(df[s]["close"], length=55)
+    df[s]["ema60"] = ema(df[s]["close"], length=60)
+    df[s]["ema65"] = ema(df[s]["close"], length=65)
+    df[s]["ema70"] = ema(df[s]["close"], length=70)
+    df[s]["ema75"] = ema(df[s]["close"], length=75)
+    df[s]["ema80"] = ema(df[s]["close"], length=80)
+    df[s]["ema85"] = ema(df[s]["close"], length=85)
+    df[s]["ema90"] = ema(df[s]["close"], length=90)
+
+    df[s]["wma14"] = wma(df[s]["close"], length=14)
+
+    df[s]["atr14"] = atr(df[s]["high"], df[s]["low"], df[s]["close"])
+    df[s]["rsi14"] = rsi(df[s]["close"])
 
 
 def handle_socket_message(event):

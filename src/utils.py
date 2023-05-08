@@ -43,7 +43,10 @@ class Utils:
 
         headers = [
             'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'trades',
-            'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore', 'ema1', 'ema2', 'ema3',
+            'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore',
+            'ema5', 'ema9', 'ema10', 'ema15', 'ema20', 'ema25', 'ema30', 'ema35', 'ema40', 'ema45', 'ema50', 'ema55',
+            'ema60', 'ema65', 'ema70', 'ema75', 'ema80', 'ema85', 'ema90',
+            'wma14', 'atr14', 'rsi14',
             'current_price'
         ]
 

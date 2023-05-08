@@ -35,7 +35,8 @@ class Strategy:
             else False
         )
 
-        self.create_client()
+        if not self.setting.is_back_test:
+            self.create_client()
 
         if self.live:
             self.setup_binance()
@@ -220,8 +221,7 @@ class Strategy:
                 closePosition="true",
                 stopPrice=round(
                     self.account.stop_loss_price, self.get_symbol_price_precision(s)
-                ),
-                workingType="MARK_PRICE",
+                )
             )
 
             self.account.last_stop_loss_order_id = stop_order["orderId"]
@@ -378,8 +378,7 @@ class Strategy:
                         stopPrice=round(
                             self.account.stop_loss_price,
                             self.get_symbol_price_precision(s),
-                        ),
-                        workingType="MARK_PRICE",
+                        )
                     )
 
                     self.account.last_stop_loss_order_id = stop_order["orderId"]
@@ -399,8 +398,7 @@ class Strategy:
                             stopPrice=round(
                                 self.account.take_profit_price,
                                 self.get_symbol_price_precision(s),
-                            ),
-                            workingType="MARK_PRICE",
+                            )
                         )
 
                         self.account.last_take_profit_order_id = stop_order["orderId"]
@@ -437,12 +435,33 @@ class Strategy:
 
         self.account.position_fee = 0
 
+    # still development
+    def is_amplitude_valid(self, s: str, actual_amplitude: float) -> bool:
+        actual_amplitude = abs(actual_amplitude)
+
+        if actual_amplitude >= self.setting.ema_amplitude:
+            if s not in self.setting.amplitude_manager \
+                    or (s in self.setting.amplitude_manager and self.setting.amplitude_manager[s] < actual_amplitude):
+                self.setting.amplitude_manager[s] = actual_amplitude
+
+            if actual_amplitude < self.setting.amplitude_manager[s]:
+                amplitude_diff = self.get_percentage_difference(self.setting.amplitude_manager[s], actual_amplitude)
+
+                if amplitude_diff >= self.setting.trailing_amplitude_diff: #  and actual_amplitude >= 4.8
+                    print(f'Diff: amplitude_diff {amplitude_diff}, actual_amplitude {actual_amplitude}')
+                    return True
+        else:
+            if s in self.setting.amplitude_manager:
+                del self.setting.amplitude_manager[s]
+
+        return False
+
     def process_kline_event(self, s: str, df_data: pd.DataFrame, current_price: float):
         current_time = datetime.fromtimestamp(
             int(float(df_data.close_time)) / 1000
         ).strftime("%Y-%m-%d %H:%M:%S")
 
-        if pd.isna(df_data.ema1) or pd.isna(df_data.ema2) or pd.isna(df_data.ema3):
+        if pd.isna(df_data.ema9) or pd.isna(df_data.ema20) or pd.isna(df_data.ema55):
             return
 
         if self.account.balance <= 0:
@@ -453,21 +472,24 @@ class Strategy:
             return
 
         actual_amplitude = self.get_percentage_difference(
-            current_price, float(df_data.ema2)
+            current_price, float(df_data.ema20)
         )
 
-        if self.setting.is_back_test:
-            if abs(actual_amplitude) >= self.setting.ema1_amplitude:
-                print(s, current_time, actual_amplitude)
+        # if self.setting.is_back_test:
+        #     if abs(actual_amplitude) >= self.setting.ema_amplitude:
+        #         print(s, current_time, actual_amplitude)
 
-        is_amplitude_valid = abs(actual_amplitude) >= self.setting.ema1_amplitude
+        if self.setting.use_trailing_entry:
+            is_amplitude_valid = self.is_amplitude_valid(s, actual_amplitude)
+        else:
+            is_amplitude_valid = abs(actual_amplitude) >= self.setting.ema_amplitude
 
         if self.should_dump_to_csv:
             self.utils.dump_to_csv(s, df_data, current_price)
 
-        print(f"Symbol: {s}, Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, "
-              f"Ema3: {df_data.ema3}, Actual "
-              f"Amplitude: {abs(actual_amplitude)}, Is Amplitude Valid: {is_amplitude_valid}")
+        # print(f"Symbol: {s}, Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, "
+        #       f"Ema3: {df_data.ema3}, Actual "
+        #       f"Amplitude: {abs(actual_amplitude)}, Is Amplitude Valid: {is_amplitude_valid}")
 
         if (
             self.account.long_position
@@ -499,9 +521,9 @@ class Strategy:
             not self.account.short_position
             and not self.account.long_position
             and self.setting.touches == 0
-            and current_price > float(df_data.ema1)
-            and current_price > float(df_data.ema2)
-            and current_price > float(df_data.ema3)
+            and current_price > float(df_data.ema9)
+            and current_price > float(df_data.ema20)
+            and current_price > float(df_data.ema50)
             and actual_amplitude > 0
             and is_amplitude_valid
         ):
@@ -513,9 +535,9 @@ class Strategy:
             not self.account.long_position
             and not self.account.short_position
             and self.setting.touches == 0
-            and current_price < float(df_data.ema1)
-            and current_price < float(df_data.ema2)
-            and current_price < float(df_data.ema3)
+            and current_price < float(df_data.ema9)
+            and current_price < float(df_data.ema20)
+            and current_price < float(df_data.ema50)
             and actual_amplitude < 0
             and is_amplitude_valid
         ):
