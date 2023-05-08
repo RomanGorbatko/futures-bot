@@ -382,8 +382,7 @@ def manage_opened_position(s, current_price, direction):
                     side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
                     type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
                     closePosition='true',
-                    stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
-                    workingType='MARK_PRICE'
+                    stopPrice=round(stop_loss_price, get_symbol_price_precision(s))
                 )
 
                 last_stop_loss_order_id = stop_order['orderId']
@@ -394,8 +393,7 @@ def manage_opened_position(s, current_price, direction):
                         side=Client.SIDE_BUY if direction is DIRECTION_LONG else Client.SIDE_SELL,
                         type=Client.FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET,
                         closePosition='true',
-                        stopPrice=round(take_profit_price, get_symbol_price_precision(s)),
-                        workingType='MARK_PRICE'
+                        stopPrice=round(take_profit_price, get_symbol_price_precision(s))
                     )
 
                     last_take_profit_order_id = stop_order['orderId']
@@ -474,8 +472,7 @@ def open_position(s, current_price, direction):
             side=Client.SIDE_SELL if direction is DIRECTION_LONG else Client.SIDE_BUY,
             type=Client.FUTURE_ORDER_TYPE_STOP_MARKET,
             closePosition='true',
-            stopPrice=round(stop_loss_price, get_symbol_price_precision(s)),
-            workingType='MARK_PRICE'
+            stopPrice=round(stop_loss_price, get_symbol_price_precision(s))
         )
 
         last_stop_loss_order_id = stop_order['orderId']
