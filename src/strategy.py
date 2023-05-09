@@ -287,7 +287,7 @@ class Strategy:
         exit_price = float(opposite_order["price"])
 
         pnl = self.calculate_pnl(exit_price, direction is binance.Client.SIDE_BUY)
-        self.close_position(s, pnl, direction, True)
+        self.close_position(s, pnl, True)
 
         self.utils.print_log(
             {
@@ -302,11 +302,9 @@ class Strategy:
             }
         )
 
-    def close_position(self, s: str, pnl: float, direction: str, force_close: bool = False):
-        if direction is self.setting.DIRECTION_LONG:
-            self.account.long_position = False
-        else:
-            self.account.short_position = False
+    def close_position(self, s: str, pnl: float, force_close: bool = False):
+        self.account.long_position = False
+        self.account.short_position = False
 
         if force_close is False:
             if pnl < 0:
@@ -348,7 +346,7 @@ class Strategy:
         pnl = self.calculate_pnl(exit_price, direction is self.setting.DIRECTION_SHORT)
 
         if pnl < 0:  # stop loss
-            self.close_position(s, pnl, direction)
+            self.close_position(s, pnl)
         else:  # take profits
             if self.setting.touches <= self.setting.max_trailing_takes:  # trailing
                 last_action_increase = (
@@ -472,7 +470,7 @@ class Strategy:
 
                 return
             else:  # absolute take profit
-                self.close_position(s, pnl, direction)
+                self.close_position(s, pnl)
 
         self.utils.print_log(
             {
