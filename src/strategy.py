@@ -79,8 +79,10 @@ class Strategy:
             # comment below line to disable
             # leverage_info['brackets'][0]['initialLeverage'] = 2
 
-            self.setting.symbols_settings[s]['leverage'] = leverage_info['brackets'][0]
+            # needs to process APIError(code=-2027): Exceeded the maximum allowable position at current leverage.
+            self.setting.symbols_settings[s]['leverage'] = leverage_info['brackets'][1]
 
+            print(s, self.setting.symbols_settings[s]['leverage']['initialLeverage'])
             self.client.futures_change_leverage(
                 symbol=s,
                 # leverage=2
@@ -379,6 +381,8 @@ class Strategy:
                         else binance.Client.SIDE_SELL
                     )
 
+                    # needs to process error:
+                    # APIError(code=-2027): Exceeded the maximum allowable position at current leverage.
                     self.client.futures_create_order(
                         symbol=s,
                         side=side,
