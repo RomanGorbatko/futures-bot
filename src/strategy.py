@@ -416,9 +416,20 @@ class Strategy:
 
                 if self.live:
                     if self.account.last_stop_loss_order_id > 0:
-                        self.client.futures_cancel_order(
-                            symbol=s, orderId=self.account.last_stop_loss_order_id
-                        )
+                        try:
+                            self.client.futures_cancel_order(
+                                symbol=s, orderId=self.account.last_stop_loss_order_id
+                            )
+                        except BinanceAPIException as e:
+                            self.utils.print_log(
+                                {
+                                    "Symbol": s,
+                                    "Time": current_time,
+                                    "Exception": " ❗",
+                                    "Message": e.message,
+                                    "Code": e.code,
+                                }
+                            )
 
                     side = (
                         binance.Client.SIDE_SELL
