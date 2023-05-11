@@ -45,12 +45,16 @@ if from_date:
 for file in log_files:
     symbol = file[:-4]
 
-    if symbol != 'APTUSDT':
+    if symbol not in ['DOTUSDT', 'MATICUSDT', 'ATOMUSDT', 'LDOUSDT']:
         continue
 
     print(f'Processing symbol {symbol}')
     try:
-        with open(file, 'r') as csv_file:
+        file_abs_path = os.getcwd() + "/" + file
+
+        print(file_abs_path, os.path.isfile(file_abs_path))
+
+        with open(os.getcwd() + "/" + file, 'r') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
 
             header = []
@@ -68,6 +72,7 @@ for file in log_files:
 
                 strategy.process_kline_event(symbol, df_data, float(df_data['current_price']))
     except FileNotFoundError as re:
+        # raise re
         print(re)
 
 print(f'Wins: {strategy.setting.wins}')

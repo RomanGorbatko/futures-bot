@@ -306,34 +306,35 @@ class Strategy:
         )
 
     def close_position(self, s: str, pnl: float, direction: str):
-        side = (
-            binance.Client.SIDE_SELL
-            if direction is self.setting.DIRECTION_LONG
-            else binance.Client.SIDE_BUY
-        )
-
-        try:
-            # opposite order
-            opposite_order = self.client.futures_create_order(
-                symbol=s,
-                side=side,
-                type=binance.Client.ORDER_TYPE_MARKET,
-                quantity=round(
-                    self.account.asset_size, self.get_symbol_quantity_precision(s)
-                ),
-            )
-        except BinanceAPIException as e:
-            self.utils.print_log(
-                {
-                    "Symbol": s,
-                    "Exception": " ❗",
-                    "Reason": "At close position",
-                    "Message": e.message,
-                    "Code": e.code,
-                }
+        if self.live:
+            side = (
+                binance.Client.SIDE_SELL
+                if direction is self.setting.DIRECTION_LONG
+                else binance.Client.SIDE_BUY
             )
 
-            return
+            try:
+                # opposite order
+                opposite_order = self.client.futures_create_order(
+                    symbol=s,
+                    side=side,
+                    type=binance.Client.ORDER_TYPE_MARKET,
+                    quantity=round(
+                        self.account.asset_size, self.get_symbol_quantity_precision(s)
+                    ),
+                )
+            except BinanceAPIException as e:
+                self.utils.print_log(
+                    {
+                        "Symbol": s,
+                        "Exception": " ❗",
+                        "Reason": "At close position",
+                        "Message": e.message,
+                        "Code": e.code,
+                    }
+                )
+
+                return
 
         self.account.long_position = False
         self.account.short_position = False
@@ -349,7 +350,7 @@ class Strategy:
         # else:
         #     self.setting.loses += 1
 
-        if pnl < 0:
+        if pnl <= 0:
             if self.setting.touches > 1:
                 self.setting.trailing_loses += 1
             else:
@@ -452,6 +453,9 @@ class Strategy:
                     self.account.take_profit_price = self.account.entry_price * (
                         1 - self.setting.trailing_take_profit
                     )
+
+                # if (self.setting.touches - 1) == self.setting.max_trailing_takes:
+                #     self.account.stop_loss_price = self.account.entry_price
 
                 # if self.live:
                 #     if self.account.last_stop_loss_order_id > 0:
