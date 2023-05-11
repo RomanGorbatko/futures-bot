@@ -125,7 +125,17 @@ def handle_socket_message(event):
     df_data = df[s].iloc[-1]
     event_data = event_df.iloc[0]
 
-    strategy.process_kline_event(s, df_data, float(event_data.close))
+    try:
+        strategy.process_kline_event(s, df_data, float(event_data.close))
+    except Exception as e:
+        strategy.utils.print_log(
+            {
+                "Symbol": s,
+                "Exception": " ❗",
+                "Reason": "At process_kline_event",
+                "Message": str(e),
+            }
+        )
 
 
 def update_dataframe(skip_timer=False):

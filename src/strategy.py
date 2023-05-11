@@ -227,40 +227,40 @@ class Strategy:
             }
         )
 
-        if self.live:
-            side = (
-                binance.Client.SIDE_SELL
-                if direction is self.setting.DIRECTION_LONG
-                else binance.Client.SIDE_BUY
-            )
-
-            try:
-                stop_order = self.client.futures_create_order(
-                    symbol=s,
-                    side=side,
-                    type=binance.Client.FUTURE_ORDER_TYPE_STOP_MARKET,
-                    closePosition="true",
-                    stopPrice=round(
-                        self.account.stop_loss_price, self.get_symbol_price_precision(s)
-                    )
-                )
-
-                self.account.last_stop_loss_order_id = stop_order["orderId"]
-            except BinanceAPIException as e:
-                self.utils.print_log(
-                    {
-                        "Symbol": s,
-                        "Time": current_time,
-                        "Exception": " ❗",
-                        "Message": e.message,
-                        "Code": e.code,
-                    }
-                )
-
-                if str(e.code) == '-2021':  # Order would immediately trigger.
-                    self.force_close_position(s, side)
-
-                return
+        # if self.live:
+        #     side = (
+        #         binance.Client.SIDE_SELL
+        #         if direction is self.setting.DIRECTION_LONG
+        #         else binance.Client.SIDE_BUY
+        #     )
+        #
+        #     try:
+        #         stop_order = self.client.futures_create_order(
+        #             symbol=s,
+        #             side=side,
+        #             type=binance.Client.FUTURE_ORDER_TYPE_STOP_MARKET,
+        #             closePosition="true",
+        #             stopPrice=round(
+        #                 self.account.stop_loss_price, self.get_symbol_price_precision(s)
+        #             )
+        #         )
+        #
+        #         self.account.last_stop_loss_order_id = stop_order["orderId"]
+        #     except BinanceAPIException as e:
+        #         self.utils.print_log(
+        #             {
+        #                 "Symbol": s,
+        #                 "Time": current_time,
+        #                 "Exception": " ❗",
+        #                 "Message": e.message,
+        #                 "Code": e.code,
+        #             }
+        #         )
+        #
+        #         if str(e.code) == '-2021':  # Order would immediately trigger.
+        #             self.force_close_position(s, side)
+        #
+        #         return
 
         self.setting.last_orders.append(
             {
@@ -272,6 +272,7 @@ class Strategy:
             }
         )
 
+    # deprecated
     def force_close_position(self,  s: str, direction: str):
         if self.account.asset_size == 0:
             return
@@ -304,20 +305,60 @@ class Strategy:
             }
         )
 
-    def close_position(self, s: str, pnl: float, force_close: bool = False):
+    def close_position(self, s: str, pnl: float, direction: str):
+        side = (
+            binance.Client.SIDE_SELL
+            if direction is self.setting.DIRECTION_LONG
+            else binance.Client.SIDE_BUY
+        )
+
+        try:
+            # opposite order
+            opposite_order = self.client.futures_create_order(
+                symbol=s,
+                side=side,
+                type=binance.Client.ORDER_TYPE_MARKET,
+                quantity=round(
+                    self.account.asset_size, self.get_symbol_quantity_precision(s)
+                ),
+            )
+        except BinanceAPIException as e:
+            self.utils.print_log(
+                {
+                    "Symbol": s,
+                    "Exception": " ❗",
+                    "Reason": "At close position",
+                    "Message": e.message,
+                    "Code": e.code,
+                }
+            )
+
+            return
+
         self.account.long_position = False
         self.account.short_position = False
 
-        if force_close is False:
-            if pnl < 0:
-                if self.setting.touches > 1:
-                    self.setting.trailing_loses += 1
-                else:
-                    self.setting.loses += 1
+        # if force_close is False:
+        #     if pnl < 0:
+        #         if self.setting.touches > 1:
+        #             self.setting.trailing_loses += 1
+        #         else:
+        #             self.setting.loses += 1
+        #     else:
+        #         self.setting.wins += 1
+        # else:
+        #     self.setting.loses += 1
+
+        if pnl < 0:
+            if self.setting.touches > 1:
+                self.setting.trailing_loses += 1
             else:
-                self.setting.wins += 1
+                self.setting.loses += 1
         else:
-            self.setting.loses += 1
+            self.setting.wins += 1
+
+        self.account.stop_loss_price = 0
+        self.account.take_profit_price = 0
 
         fee = self.calculate_maker_fee(self.account.position_size)
         self.account.position_fee += fee
@@ -325,8 +366,6 @@ class Strategy:
         self.setting.touches = 0
         self.account.position_size = 0
         self.account.asset_size = 0
-        self.account.last_stop_loss_order_id = 0
-        self.account.last_take_profit_order_id = 0
 
         self.account.balance += pnl - self.account.position_fee
 
@@ -348,7 +387,7 @@ class Strategy:
         pnl = self.calculate_pnl(exit_price, direction is self.setting.DIRECTION_SHORT)
 
         if pnl < 0:  # stop loss
-            self.close_position(s, pnl)
+            self.close_position(s, pnl, direction)
         else:  # take profits
             if self.setting.touches <= self.setting.max_trailing_takes:  # trailing
                 last_action_increase = (
@@ -414,61 +453,61 @@ class Strategy:
                         1 - self.setting.trailing_take_profit
                     )
 
-                if self.live:
-                    if self.account.last_stop_loss_order_id > 0:
-                        try:
-                            self.client.futures_cancel_order(
-                                symbol=s, orderId=self.account.last_stop_loss_order_id
-                            )
-                        except BinanceAPIException as e:
-                            self.utils.print_log(
-                                {
-                                    "Symbol": s,
-                                    "Time": current_time,
-                                    "Exception": " ❗",
-                                    "Message": e.message,
-                                    "Code": e.code,
-                                }
-                            )
-
-                    side = (
-                        binance.Client.SIDE_SELL
-                        if direction is self.setting.DIRECTION_LONG
-                        else binance.Client.SIDE_BUY
-                    )
-
-                    stop_order = self.client.futures_create_order(
-                        symbol=s,
-                        side=side,
-                        type=binance.Client.FUTURE_ORDER_TYPE_STOP_MARKET,
-                        closePosition="true",
-                        stopPrice=round(
-                            self.account.stop_loss_price,
-                            self.get_symbol_price_precision(s),
-                        )
-                    )
-
-                    self.account.last_stop_loss_order_id = stop_order["orderId"]
-
-                    if (self.setting.touches - 1) == self.setting.max_trailing_takes:
-                        side = (
-                            binance.Client.SIDE_BUY
-                            if direction is self.setting.DIRECTION_LONG
-                            else binance.Client.SIDE_SELL
-                        )
-
-                        stop_order = self.client.futures_create_order(
-                            symbol=s,
-                            side=side,
-                            type=binance.Client.FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET,
-                            closePosition="true",
-                            stopPrice=round(
-                                self.account.take_profit_price,
-                                self.get_symbol_price_precision(s),
-                            )
-                        )
-
-                        self.account.last_take_profit_order_id = stop_order["orderId"]
+                # if self.live:
+                #     if self.account.last_stop_loss_order_id > 0:
+                #         try:
+                #             self.client.futures_cancel_order(
+                #                 symbol=s, orderId=self.account.last_stop_loss_order_id
+                #             )
+                #         except BinanceAPIException as e:
+                #             self.utils.print_log(
+                #                 {
+                #                     "Symbol": s,
+                #                     "Time": current_time,
+                #                     "Exception": " ❗",
+                #                     "Message": e.message,
+                #                     "Code": e.code,
+                #                 }
+                #             )
+                #
+                #     side = (
+                #         binance.Client.SIDE_SELL
+                #         if direction is self.setting.DIRECTION_LONG
+                #         else binance.Client.SIDE_BUY
+                #     )
+                #
+                #     stop_order = self.client.futures_create_order(
+                #         symbol=s,
+                #         side=side,
+                #         type=binance.Client.FUTURE_ORDER_TYPE_STOP_MARKET,
+                #         closePosition="true",
+                #         stopPrice=round(
+                #             self.account.stop_loss_price,
+                #             self.get_symbol_price_precision(s),
+                #         )
+                #     )
+                #
+                #     self.account.last_stop_loss_order_id = stop_order["orderId"]
+                #
+                #     if (self.setting.touches - 1) == self.setting.max_trailing_takes:
+                #         side = (
+                #             binance.Client.SIDE_BUY
+                #             if direction is self.setting.DIRECTION_LONG
+                #             else binance.Client.SIDE_SELL
+                #         )
+                #
+                #         stop_order = self.client.futures_create_order(
+                #             symbol=s,
+                #             side=side,
+                #             type=binance.Client.FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET,
+                #             closePosition="true",
+                #             stopPrice=round(
+                #                 self.account.take_profit_price,
+                #                 self.get_symbol_price_precision(s),
+                #             )
+                #         )
+                #
+                #         self.account.last_take_profit_order_id = stop_order["orderId"]
 
                 self.utils.print_log(
                     {
@@ -485,7 +524,7 @@ class Strategy:
 
                 return
             else:  # absolute take profit
-                self.close_position(s, pnl)
+                self.close_position(s, pnl, direction)
 
         self.utils.print_log(
             {

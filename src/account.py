@@ -10,9 +10,6 @@ class Account:
     position_size = 0
     position_fee = 0
 
-    last_stop_loss_order_id = 0
-    last_take_profit_order_id = 0
-
     def __init__(self, balance: float = 0):
         self.balance = balance
         pass
