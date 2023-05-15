@@ -161,7 +161,7 @@ class Strategy:
         return (rate * position_size) - position_size
 
     def open_position(
-        self, s: str, current_price: float, direction: str, current_time: str
+        self, s: str, current_price: float, direction: str, current_time: str, atr: float
     ):
         if direction is self.setting.DIRECTION_LONG:
             self.account.long_position = True
@@ -197,35 +197,36 @@ class Strategy:
         if direction is self.setting.DIRECTION_LONG:
             self.account.stop_loss_price = self.account.entry_price * (
                 1 - self.setting.stop_loss
-            )
+            ) * (1 - atr)
             self.account.take_profit_price = self.account.entry_price * (
                 1 + self.setting.take_profit
-            )
+            ) * (1 + atr)
             self.setting.last_action = self.setting.OPEN_LONG
         else:
             self.account.stop_loss_price = self.account.entry_price * (
                 1 + self.setting.stop_loss
-            )
+            ) * (1 + atr)
             self.account.take_profit_price = self.account.entry_price * (
                 1 - self.setting.take_profit
-            )
+            ) * (1 - atr)
             self.setting.last_action = self.setting.OPEN_SHORT
 
-        self.utils.print_log(
-            {
-                "Symbol": s,
-                "Time": current_time,
-                "Open": "Long 🟢"
-                if direction is self.setting.DIRECTION_LONG
-                else "Short 🔴",
-                "Position Size": f"${self.account.position_size:,.4f}",
-                "Asset Size": f"{self.account.asset_size:.4f}",
-                "Entry Price": f"{self.account.entry_price:.5f}",
-                "Stop Loss Price": f"{self.account.stop_loss_price:.5f}",
-                "Take Profit Price": f"{self.account.take_profit_price:.5f}",
-                "Balance": f"${self.account.balance:,.4f}",
-            }
-        )
+        if not self.setting.is_hyperopt:
+            self.utils.print_log(
+                {
+                    "Symbol": s,
+                    "Time": current_time,
+                    "Open": "Long 🟢"
+                    if direction is self.setting.DIRECTION_LONG
+                    else "Short 🔴",
+                    "Position Size": f"${self.account.position_size:,.4f}",
+                    "Asset Size": f"{self.account.asset_size:.4f}",
+                    "Entry Price": f"{self.account.entry_price:.5f}",
+                    "Stop Loss Price": f"{self.account.stop_loss_price:.5f}",
+                    "Take Profit Price": f"{self.account.take_profit_price:.5f}",
+                    "Balance": f"${self.account.balance:,.4f}",
+                }
+            )
 
         # if self.live:
         #     side = (
@@ -292,18 +293,19 @@ class Strategy:
         pnl = self.calculate_pnl(exit_price, direction is binance.Client.SIDE_BUY)
         self.close_position(s, pnl, True)
 
-        self.utils.print_log(
-            {
-                "Symbol": s,
-                "Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Force Close": " ❗ 🔵️",
-                "Clear Pnl": f"${pnl:,.4f}",
-                "Fee": f"$-{self.account.position_fee:,.4f}",
-                "Entry Price": f"{self.account.entry_price:.5f}",
-                "Exit Price": f"{exit_price:.5f}",
-                "Balance": f"${self.account.balance:,.4f}",
-            }
-        )
+        if not self.setting.is_hyperopt:
+            self.utils.print_log(
+                {
+                    "Symbol": s,
+                    "Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Force Close": " ❗ 🔵️",
+                    "Clear Pnl": f"${pnl:,.4f}",
+                    "Fee": f"$-{self.account.position_fee:,.4f}",
+                    "Entry Price": f"{self.account.entry_price:.5f}",
+                    "Exit Price": f"{exit_price:.5f}",
+                    "Balance": f"${self.account.balance:,.4f}",
+                }
+            )
 
     def close_position(self, s: str, pnl: float, direction: str):
         if self.live:
@@ -373,7 +375,7 @@ class Strategy:
         self.account.symbol_position = None
 
     def manage_opened_position(
-        self, s: str, current_price: float, direction: str, current_time: str
+        self, s: str, current_price: float, direction: str, current_time: str, atr: float
     ):
         if direction is self.setting.DIRECTION_LONG:
             exit_condition = current_price <= self.account.stop_loss_price
@@ -442,17 +444,17 @@ class Strategy:
                 if direction is self.setting.DIRECTION_LONG:
                     self.account.stop_loss_price = self.account.entry_price * (
                         1 - self.setting.trailing_stop_loss
-                    )
+                    ) * (1 - atr)
                     self.account.take_profit_price = self.account.entry_price * (
                         1 + self.setting.trailing_take_profit
-                    )
+                    ) * (1 + atr)
                 else:
                     self.account.stop_loss_price = self.account.entry_price * (
                         1 + self.setting.trailing_stop_loss
-                    )
+                    ) * (1 + atr)
                     self.account.take_profit_price = self.account.entry_price * (
                         1 - self.setting.trailing_take_profit
-                    )
+                    ) * (1 - atr)
 
                 # if (self.setting.touches - 1) == self.setting.max_trailing_takes:
                 #     self.account.stop_loss_price = self.account.entry_price
@@ -513,35 +515,37 @@ class Strategy:
                 #
                 #         self.account.last_take_profit_order_id = stop_order["orderId"]
 
-                self.utils.print_log(
-                    {
-                        "Symbol": s,
-                        "Time": current_time,
-                        f"Increase {direction}": self.setting.touches - 1,
-                        "Position Size": f"${self.account.position_size:,.4f}",
-                        "Asset Size": f"{self.account.asset_size:.4f}",
-                        "Entry Price": f"{self.account.entry_price:.5f}",
-                        "Stop Loss Price": f"{self.account.stop_loss_price:.5f}",
-                        "Take Profit Price": f"{self.account.take_profit_price:.5f}",
-                    }
-                )
+                if not self.setting.is_hyperopt:
+                    self.utils.print_log(
+                        {
+                            "Symbol": s,
+                            "Time": current_time,
+                            f"Increase {direction}": self.setting.touches - 1,
+                            "Position Size": f"${self.account.position_size:,.4f}",
+                            "Asset Size": f"{self.account.asset_size:.4f}",
+                            "Entry Price": f"{self.account.entry_price:.5f}",
+                            "Stop Loss Price": f"{self.account.stop_loss_price:.5f}",
+                            "Take Profit Price": f"{self.account.take_profit_price:.5f}",
+                        }
+                    )
 
                 return
             else:  # absolute take profit
                 self.close_position(s, pnl, direction)
 
-        self.utils.print_log(
-            {
-                "Symbol": s,
-                "Time": current_time,
-                "Close": f"{direction} 🔵️",
-                "Clear Pnl": f"${pnl:,.4f}",
-                "Fee": f"$-{self.account.position_fee:,.4f}",
-                "Entry Price": f"{self.account.entry_price:.5f}",
-                "Exit Price": f"{exit_price:.5f}",
-                "Balance": f"${self.account.balance:,.4f}",
-            }
-        )
+        if not self.setting.is_hyperopt:
+            self.utils.print_log(
+                {
+                    "Symbol": s,
+                    "Time": current_time,
+                    "Close": f"{direction} 🔵️",
+                    "Clear Pnl": f"${pnl:,.4f}",
+                    "Fee": f"$-{self.account.position_fee:,.4f}",
+                    "Entry Price": f"{self.account.entry_price:.5f}",
+                    "Exit Price": f"{exit_price:.5f}",
+                    "Balance": f"${self.account.balance:,.4f}",
+                }
+            )
 
         self.account.position_fee = 0
 
@@ -582,7 +586,7 @@ class Strategy:
             return
 
         actual_amplitude = self.get_percentage_difference(
-            current_price, float(df_data.ema20)
+            current_price, float(df_data[self.setting.indicator])
         )
 
         # if self.setting.is_back_test:
@@ -610,7 +614,7 @@ class Strategy:
             )
         ):
             self.manage_opened_position(
-                s, current_price, self.setting.DIRECTION_LONG, current_time
+                s, current_price, self.setting.DIRECTION_LONG, current_time, float(df_data.atr14)
             )
             return
 
@@ -623,7 +627,7 @@ class Strategy:
             )
         ):
             self.manage_opened_position(
-                s, current_price, self.setting.DIRECTION_SHORT, current_time
+                s, current_price, self.setting.DIRECTION_SHORT, current_time, float(df_data.atr14)
             )
             return
 
@@ -638,7 +642,7 @@ class Strategy:
             and is_amplitude_valid
         ):
             self.open_position(
-                s, current_price, self.setting.DIRECTION_SHORT, current_time
+                s, current_price, self.setting.DIRECTION_SHORT, current_time, float(df_data.atr14)
             )
 
         if (
@@ -652,5 +656,5 @@ class Strategy:
             and is_amplitude_valid
         ):
             self.open_position(
-                s, current_price, self.setting.DIRECTION_LONG, current_time
+                s, current_price, self.setting.DIRECTION_LONG, current_time, float(df_data.atr14)
             )

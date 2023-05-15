@@ -1,5 +1,6 @@
 class Setting:
     is_back_test: bool = False
+    is_hyperopt: bool = False
 
     low_risk_per_trade = 0.02
     high_risk_per_trade = 0.1
@@ -14,7 +15,8 @@ class Setting:
     trailing_take_profit = 0.01  # 0.5%
     max_trailing_takes = 2
 
-    ema_amplitude = 2
+    ema_amplitude = 2.4
+    indicator = "ema9"
 
     touches = 0
     wins = 0
@@ -49,7 +51,10 @@ class Setting:
         'MANAUSDT', 'LDOUSDT', 'XRPUSDT',
         'ADAUSDT', 'ATOMUSDT', 'DOGEUSDT',
 
-        'AAVEUSDT', 'NEARUSDT',
+        'AAVEUSDT', 'NEARUSDT', 'AXSUSDT',
+        'ENJUSDT', 'GRTUSDT', 'WAVESUSDT',
+        'TOMOUSDT', 'RLCUSDT', 'JASMYUSDT',
+        'KAVAUSDT', 'AGIXUSDT', 'SPELLUSDT'
     ]
 
     def __init__(self):

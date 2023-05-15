@@ -37,6 +37,9 @@ from_date = None
 strategy.setting.use_trailing_entry = False
 strategy.setting.trailing_amplitude_diff = 10
 
+strategy.setting.indicator = "ema9"
+strategy.setting.ema_amplitude = 2.4
+
 if from_date:
     from_date = time.mktime(
         datetime.datetime.strptime(from_date, "%d-%m-%Y %H:%M:%S").timetuple()
@@ -45,7 +48,7 @@ if from_date:
 for file in log_files:
     symbol = file[:-4]
 
-    if symbol not in ['DOTUSDT', 'MATICUSDT', 'ATOMUSDT', 'LDOUSDT']:
+    if symbol not in ['LDOUSDT']:
         continue
 
     print(f'Processing symbol {symbol}')

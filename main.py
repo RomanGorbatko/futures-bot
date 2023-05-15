@@ -171,7 +171,8 @@ strategy.utils.print_log(
     {
         "Balance": f"${strategy.account.balance:,.2f}",
         "Start Time": start_time,
-        "Interval": interval,
+        "Indicator": setting.indicator,
+        "Ema Amplitude": setting.ema_amplitude,
         "Low Risk Per Trade": f"{setting.low_risk_per_trade * 100}%",
         "High Risk Per Trade": f"{setting.high_risk_per_trade * 100}%",
         "Stop Loss": f"{setting.stop_loss * 100}%",
