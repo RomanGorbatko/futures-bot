@@ -161,7 +161,7 @@ class Strategy:
         return (rate * position_size) - position_size
 
     def open_position(
-        self, s: str, current_price: float, direction: str, current_time: str, atr: float
+        self, s: str, current_price: float, direction: str, current_time: str, atr: float, amplitude: float
     ):
         if direction is self.setting.DIRECTION_LONG:
             self.account.long_position = True
@@ -216,6 +216,8 @@ class Strategy:
                 {
                     "Symbol": s,
                     "Time": current_time,
+                    "ATR": f"{atr:.5f}",
+                    "Amplitude": f"{amplitude:.5f}",
                     "Open": "Long 🟢"
                     if direction is self.setting.DIRECTION_LONG
                     else "Short 🔴",
@@ -642,7 +644,8 @@ class Strategy:
             and is_amplitude_valid
         ):
             self.open_position(
-                s, current_price, self.setting.DIRECTION_SHORT, current_time, float(df_data.atr14)
+                s, current_price, self.setting.DIRECTION_SHORT,
+                current_time, float(df_data.atr14), abs(actual_amplitude)
             )
 
         if (
@@ -656,5 +659,6 @@ class Strategy:
             and is_amplitude_valid
         ):
             self.open_position(
-                s, current_price, self.setting.DIRECTION_LONG, current_time, float(df_data.atr14)
+                s, current_price, self.setting.DIRECTION_LONG,
+                current_time, float(df_data.atr14), abs(actual_amplitude)
             )

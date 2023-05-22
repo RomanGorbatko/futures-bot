@@ -48,8 +48,8 @@ class Setting:
         'BNBUSDT', 'INJUSDT', 'FILUSDT',
         'SOLUSDT', 'FLMUSDT', 'FTMUSDT',
         'ETCUSDT', 'TRXUSDT', 'LTCUSDT',
-        'MANAUSDT', 'LDOUSDT', 'XRPUSDT',
-        'ADAUSDT', 'ATOMUSDT', 'DOGEUSDT',
+        'MANAUSDT', 'XRPUSDT', #'LDOUSDT',
+        'ADAUSDT', 'DOGEUSDT', #'ATOMUSDT',
 
         'AAVEUSDT', 'NEARUSDT', 'AXSUSDT',
         'ENJUSDT', 'GRTUSDT', 'WAVESUSDT',
