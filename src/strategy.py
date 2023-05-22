@@ -82,7 +82,7 @@ class Strategy:
             # needs to process APIError(code=-2027): Exceeded the maximum allowable position at current leverage.
             self.setting.symbols_settings[s]['leverage'] = leverage_info['brackets'][1]
 
-            print(s, self.setting.symbols_settings[s]['leverage']['initialLeverage'])
+            # print(s, self.setting.symbols_settings[s]['leverage']['initialLeverage'])
             self.client.futures_change_leverage(
                 symbol=s,
                 # leverage=2
@@ -180,7 +180,7 @@ class Strategy:
                 else binance.Client.SIDE_SELL
             )
 
-            self.client.futures_create_order(
+            response = self.client.futures_create_order(
                 symbol=s,
                 side=side,
                 type=binance.Client.ORDER_TYPE_MARKET,
@@ -188,8 +188,13 @@ class Strategy:
                     self.account.asset_size, self.get_symbol_quantity_precision(s)
                 ),
             )
+
+            self.utils.logger().info({'futures_create_order': response})
+
             position = self.client.futures_position_information(symbol=s)[0]
             self.account.entry_price = float(position["entryPrice"])
+
+            self.utils.logger().info({'futures_position_information': position})
 
         self.setting.touches = 1
         self.setting.last_orders = []
@@ -327,6 +332,8 @@ class Strategy:
                         self.account.asset_size, self.get_symbol_quantity_precision(s)
                     ),
                 )
+
+                self.utils.logger().info({'futures_create_order (opposite_order)': opposite_order})
             except BinanceAPIException as e:
                 self.utils.print_log(
                     {
@@ -427,7 +434,7 @@ class Strategy:
 
                     # needs to process error:
                     # APIError(code=-2027): Exceeded the maximum allowable position at current leverage.
-                    self.client.futures_create_order(
+                    response = self.client.futures_create_order(
                         symbol=s,
                         side=side,
                         type=binance.Client.ORDER_TYPE_MARKET,
@@ -435,8 +442,12 @@ class Strategy:
                             increase_asset_size, self.get_symbol_quantity_precision(s)
                         ),
                     )
+                    self.utils.logger().info({'futures_create_order (increase)': response})
+
                     position = self.client.futures_position_information(symbol=s)[0]
                     self.account.entry_price = float(position["entryPrice"])
+
+                    self.utils.logger().info({'futures_position_information (increase)': position})
 
                 self.account.position_size += increase_position_size
                 self.account.asset_size += increase_asset_size

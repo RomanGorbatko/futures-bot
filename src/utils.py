@@ -1,4 +1,5 @@
 import csv
+import logging
 import sys
 import os
 
@@ -12,18 +13,20 @@ class Utils:
     def __init__(self, ENV: str = "local"):
         self.ENV = ENV
 
-    def print_log(self, data, pt=None):
+    @staticmethod
+    def logger():
+        logging.basicConfig(level=logging.INFO, filename="logs/out.log", filemode="a+",
+                            format="%(asctime)s %(levelname)s %(message)s")
+
+        return logging
+
+    def print_log(self, data):
         telegram_text = "Env: " + self.ENV + "\n"
 
-        if pt is None:
-            pt = PrettyTable(["Param", "Value"])
-            for key, value in data.items():
-                pt.add_row([key, value])
-                telegram_text += str(key) + ": " + str(value) + "\n"
-            pt.add_row(["Env", self.ENV])
+        self.logger().info(data)
 
-        print(pt)
-        sys.stdout.flush()
+        for key, value in data.items():
+            telegram_text += str(key) + ": " + str(value) + "\n"
 
         if os.getenv("TELEGRAM_CHAT_ID") and os.getenv("TELEGRAM_BOT_ID"):
             send_text = (
