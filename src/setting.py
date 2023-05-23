@@ -43,7 +43,7 @@ class Setting:
     symbols = [
         'APTUSDT', 'DYDXUSDT', 'ANKRUSDT',
         'OPUSDT', 'MATICUSDT', 'DOTUSDT',
-        'APEUSDT', 'AVAXUSDT', #'1000SHIBUSDT',
+        'APEUSDT', 'AVAXUSDT', 'ENJUSDT',
         'IMXUSDT', 'LINKUSDT', 'GALAUSDT',
         'BNBUSDT', 'INJUSDT', 'FILUSDT',
         'SOLUSDT', 'FLMUSDT', 'FTMUSDT',
@@ -52,9 +52,12 @@ class Setting:
         'ADAUSDT', 'DOGEUSDT', #'ATOMUSDT',
 
         'AAVEUSDT', 'NEARUSDT', 'AXSUSDT',
-        'ENJUSDT', #'GRTUSDT', 'WAVESUSDT',
-        #'TOMOUSDT', 'RLCUSDT', 'JASMYUSDT',
-        #'KAVAUSDT', 'AGIXUSDT', 'SPELLUSDT'
+    ]
+
+    shit_coins = [
+        'GRTUSDT', 'WAVESUSDT', '1000SHIBUSDT',
+        'TOMOUSDT', 'RLCUSDT', 'JASMYUSDT',
+        'KAVAUSDT', 'AGIXUSDT', 'SPELLUSDT'
     ]
 
     def __init__(self):
