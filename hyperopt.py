@@ -82,8 +82,8 @@ if from_date:
 for file in log_files:
     symbol = file[5:-4]
 
-    if symbol not in ['LDOUSDT', 'INJUSDT']:
-        continue
+    # if symbol not in ['LDOUSDT', 'INJUSDT']:
+    #     continue
 
     print(f'Processing symbol {symbol}')
     try:
