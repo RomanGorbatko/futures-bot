@@ -3,6 +3,7 @@ import datetime
 import glob
 import os
 import time
+from threading import Thread
 
 import pandas as pd
 import numpy as np
@@ -37,7 +38,6 @@ from_date = None
 strategy.setting.use_trailing_entry = False
 strategy.setting.trailing_amplitude_diff = 10
 
-
 hyperopt_params = {
     "indicator": [
         "ema5", "ema9", "ema10", "ema15", "ema20", "ema25", "ema30",
@@ -57,7 +57,7 @@ hyperopt_params = {
 }
 
 
-def run_back_test(csv_list):
+def run_back_test(csv_list, symbol):
     header = []
 
     print(
@@ -86,7 +86,7 @@ if from_date:
     ) * 1000
 
 
-for file in log_files:
+def process_file(file):
     symbol = file[5:-4]
 
     # if symbol not in ['LDOUSDT', 'INJUSDT']:
@@ -121,7 +121,7 @@ for file in log_files:
                         }
                     )
 
-                    run_back_test(csv_enumerate)
+                    run_back_test(csv_enumerate, symbol)
 
                     if strategy.account.balance > hyperopt_params["best_result"]:
                         hyperopt_params["best_result"] = strategy.account.balance
@@ -153,3 +153,12 @@ for file in log_files:
         hyperopt_params["best_result"] = 500
         hyperopt_params["best_params"]["indicator"] = None
         hyperopt_params["best_params"]["amplitude"] = None
+
+
+threads = []
+for f in log_files:
+    threads.append(Thread(target=process_file, args=(f,)))
+    threads[-1].start()
+
+for thread in threads:
+    thread.join()
