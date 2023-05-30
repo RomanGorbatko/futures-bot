@@ -24,9 +24,7 @@ setting.is_hyperopt = True
 
 strategy = Strategy(account, setting)
 
-logs_path = 'logs'
-os.chdir(logs_path)
-log_files = glob.glob('*.{}'.format('csv'))
+log_files = glob.glob('logs/*.{}'.format('csv'))
 
 from_date = None
 # from_date = "05-05-2023 00:00:01"
@@ -49,7 +47,7 @@ hyperopt_params = {
     "amplitude": {
         "min": 1,
         "max": 5,
-        "step": 0.2
+        "step": 0.1
     },
     "best_result": 500,
     "best_params": {
@@ -81,58 +79,69 @@ if from_date:
         datetime.datetime.strptime(from_date, "%d-%m-%Y %H:%M:%S").timetuple()
     ) * 1000
 
-for indicator in hyperopt_params["indicator"]:
-    strategy.setting.indicator = indicator
+for file in log_files:
+    symbol = file[5:-4]
 
-    for amplitude in np.arange(
-            hyperopt_params["amplitude"]["min"],
-            hyperopt_params["amplitude"]["max"],
-            hyperopt_params["amplitude"]["step"]):
-        strategy.account.balance = 500
-        strategy.setting.ema_amplitude = round(amplitude, 2)
+    if symbol not in ['LDOUSDT', 'INJUSDT']:
+        continue
 
-        strategy.utils.print_log(
-            {
-                "Try params": "",
-                "Indicator": indicator,
-                "Amplitude": strategy.setting.ema_amplitude,
-            }
-        )
+    print(f'Processing symbol {symbol}')
+    try:
+        file_abs_path = os.getcwd() + "/" + file
 
-        for file in log_files:
-            symbol = file[:-4]
+        print(file_abs_path, os.path.isfile(file_abs_path))
 
-            if symbol not in ['LDOUSDT']:
-                continue
+        with open(os.getcwd() + "/" + file, 'r') as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
 
-            print(f'Processing symbol {symbol}')
-            try:
-                file_abs_path = os.getcwd() + "/" + file
+            for indicator in hyperopt_params["indicator"]:
+                strategy.setting.indicator = indicator
 
-                print(file_abs_path, os.path.isfile(file_abs_path))
+                for amplitude in np.arange(
+                        hyperopt_params["amplitude"]["min"],
+                        hyperopt_params["amplitude"]["max"],
+                        hyperopt_params["amplitude"]["step"]):
+                    strategy.account.balance = 500
+                    strategy.setting.ema_amplitude = round(amplitude, 2)
 
-                with open(os.getcwd() + "/" + file, 'r') as csv_file:
-                    csv_reader = csv.reader(csv_file, delimiter=',')
+                    strategy.utils.print_log(
+                        {
+                            "Try params": "",
+                            "Symbol": symbol,
+                            "Indicator": indicator,
+                            "Amplitude": strategy.setting.ema_amplitude,
+                        }
+                    )
 
                     run_back_test(csv_reader)
-            except FileNotFoundError as re:
-                # raise re
-                print(re)
 
-        # print(f'Wins: {strategy.setting.wins}')
-        # print(f'Loses: {strategy.setting.loses}')
-        # print(f'Trailing Loses: {strategy.setting.trailing_loses}')
+                    if strategy.account.balance > hyperopt_params["best_result"]:
+                        hyperopt_params["best_result"] = strategy.account.balance
+                        hyperopt_params["best_params"]["indicator"] = indicator
+                        hyperopt_params["best_params"]["amplitude"] = amplitude
 
-        if strategy.account.balance > hyperopt_params["best_result"]:
-            hyperopt_params["best_result"] = strategy.account.balance
-            hyperopt_params["best_params"]["indicator"] = indicator
-            hyperopt_params["best_params"]["amplitude"] = amplitude
+                        strategy.utils.print_log(
+                            {
+                                "Best Result": "",
+                                "Symbol": symbol,
+                                "Indicator": hyperopt_params["best_params"]["indicator"],
+                                "Amplitude": hyperopt_params["best_params"]["amplitude"],
+                                "Balance": hyperopt_params["best_result"],
+                            }
+                        )
 
-            strategy.utils.print_log(
-                {
-                    "Best Result": "",
-                    "Indicator": hyperopt_params["best_params"]["indicator"],
-                    "Amplitude": hyperopt_params["best_params"]["amplitude"],
-                    "Balance": hyperopt_params["best_result"],
-                }
+    except FileNotFoundError as re:
+        # raise re
+        print(re)
+    finally:
+        if hyperopt_params["best_result"] > 500:
+            strategy.setting.save_symbol_settings_to_db(
+                symbol,
+                float(hyperopt_params["best_params"]["amplitude"]),
+                hyperopt_params["best_params"]["indicator"],
+                round(hyperopt_params["best_result"], 2)
             )
+
+        hyperopt_params["best_result"] = 500
+        hyperopt_params["best_params"]["indicator"] = None
+        hyperopt_params["best_params"]["amplitude"] = None

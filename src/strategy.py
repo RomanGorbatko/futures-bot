@@ -73,20 +73,17 @@ class Strategy:
             *_, leverage_info = filter(lambda d: d['symbol'] == s, info)
             leverage_info['brackets'].sort(key=lambda x: x['initialLeverage'], reverse=True)
 
-            if s not in self.setting.symbols_settings:
-                self.setting.symbols_settings[s] = {}
-
             # comment below line to disable
             # leverage_info['brackets'][0]['initialLeverage'] = 2
 
             # needs to process APIError(code=-2027): Exceeded the maximum allowable position at current leverage.
-            self.setting.symbols_settings[s]['leverage'] = leverage_info['brackets'][1]
+            self.setting.set_symbol_setting(s, "leverage", leverage_info["brackets"][1])
 
             # print(s, self.setting.symbols_settings[s]['leverage']['initialLeverage'])
             self.client.futures_change_leverage(
                 symbol=s,
                 # leverage=2
-                leverage=self.setting.symbols_settings[s]['leverage']['initialLeverage']
+                leverage=self.setting.get_symbol_setting(s, "leverage")["initialLeverage"]
             )
 
     def setup_symbols_settings(self):
@@ -95,10 +92,7 @@ class Strategy:
         for s in self.setting.symbols:
             *_, symbol_info = filter(lambda d: d['symbol'] == s, futures_info['symbols'])
 
-            if s not in self.setting.symbols_settings:
-                self.setting.symbols_settings[s] = {}
-
-            self.setting.symbols_settings[s]['info'] = symbol_info
+            self.setting.set_symbol_setting(s, "info", symbol_info)
 
     def setup_binance(self):
         self.update_current_balance()
@@ -444,6 +438,14 @@ class Strategy:
 
         return False
 
+    def fix_atr(self, atr) -> float:
+        atr = float(atr)
+
+        if atr >= self.setting.max_atr_value:
+            atr /= 2
+
+        return atr
+
     def process_kline_event(self, s: str, df_data: pd.DataFrame, current_price: float):
         current_time = datetime.fromtimestamp(
             int(float(df_data.close_time)) / 1000
@@ -460,7 +462,7 @@ class Strategy:
             return
 
         actual_amplitude = self.get_percentage_difference(
-            current_price, float(df_data[self.setting.indicator])
+            current_price, float(df_data[self.setting.get_symbol_setting(s, 'indicator')])
         )
 
         # if self.setting.is_back_test:
@@ -470,14 +472,18 @@ class Strategy:
         if self.setting.use_trailing_entry:
             is_amplitude_valid = self.is_amplitude_valid(s, actual_amplitude)
         else:
-            is_amplitude_valid = abs(actual_amplitude) >= self.setting.ema_amplitude
+            is_amplitude_valid = abs(actual_amplitude) >= self.setting.get_symbol_setting(s, 'amplitude')
 
         if self.should_dump_to_csv:
             self.utils.dump_to_csv(s, df_data, current_price)
 
-        # print(f"Symbol: {s}, Current price: {current_price}, Ema1: {df_data.ema1}, Ema2: {df_data.ema2}, "
-        #       f"Ema3: {df_data.ema3}, Actual "
-        #       f"Amplitude: {abs(actual_amplitude)}, Is Amplitude Valid: {is_amplitude_valid}")
+        # print(
+        #     f"Symbol: {s}, Current price: {current_price}, "
+        #     f"Setting Amplitude: {self.setting.get_symbol_setting(s, 'amplitude')}, "
+        #     f"Setting Indicator: {self.setting.get_symbol_setting(s, 'indicator')}, "
+        #     f"Actual Amplitude: {abs(actual_amplitude)}, "
+        #     f"Is Amplitude Valid: {is_amplitude_valid}"
+        # )
 
         if (
             self.account.long_position
@@ -488,7 +494,7 @@ class Strategy:
             )
         ):
             self.manage_opened_position(
-                s, current_price, self.setting.DIRECTION_LONG, current_time, float(df_data.atr14)
+                s, current_price, self.setting.DIRECTION_LONG, current_time, self.fix_atr(df_data.atr14)
             )
             return
 
@@ -501,7 +507,7 @@ class Strategy:
             )
         ):
             self.manage_opened_position(
-                s, current_price, self.setting.DIRECTION_SHORT, current_time, float(df_data.atr14)
+                s, current_price, self.setting.DIRECTION_SHORT, current_time, self.fix_atr(df_data.atr14)
             )
             return
 
@@ -517,7 +523,7 @@ class Strategy:
         ):
             self.open_position(
                 s, current_price, self.setting.DIRECTION_SHORT,
-                current_time, float(df_data.atr14), abs(actual_amplitude)
+                current_time, self.fix_atr(df_data.atr14), abs(actual_amplitude)
             )
 
         if (
@@ -532,5 +538,5 @@ class Strategy:
         ):
             self.open_position(
                 s, current_price, self.setting.DIRECTION_LONG,
-                current_time, float(df_data.atr14), abs(actual_amplitude)
+                current_time, self.fix_atr(df_data.atr14), abs(actual_amplitude)
             )

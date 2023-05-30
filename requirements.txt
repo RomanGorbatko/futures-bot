@@ -4,3 +4,5 @@ prettytable==3.6.0
 pandas-ta===0.3.14b0
 requests==2.28.2
 python-dotenv==1.0.0
+mysql-connector-python==8.0.33
+protobuf==3.20.3

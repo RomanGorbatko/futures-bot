@@ -138,6 +138,12 @@ def handle_socket_message(event):
         )
 
 
+def update_symbol_amplitude():
+    threading.Timer(300, update_symbol_amplitude).start()
+
+    setting.update_symbol_settings_from_db()
+
+
 def update_dataframe(skip_timer=False):
     if not skip_timer:
         threading.Timer(60, update_dataframe).start()
@@ -188,8 +194,9 @@ for symbol in setting.symbols:
     fix_dataframe_index(symbol)
 
 while True:
-    now = time.localtime().tm_sec
-    time.sleep(60 - now)
+    update_symbol_amplitude()
+
+    time.sleep(60 - time.localtime().tm_sec)
 
     update_dataframe()
 
