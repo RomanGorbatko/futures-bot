@@ -3,6 +3,7 @@ import datetime
 import glob
 import os
 import time
+from multiprocessing.pool import ThreadPool
 from threading import Thread
 
 import pandas as pd
@@ -16,14 +17,7 @@ from src.strategy import Strategy
 load_dotenv()
 os.environ['TZ'] = 'UTC'
 
-balance = float(os.getenv('BALANCE')) if os.getenv('BALANCE') else 500.
-
-account = Account(balance)
-setting = Setting()
-setting.is_back_test = True
-setting.is_hyperopt = True
-
-strategy = Strategy(account, setting)
+processes = int(os.getenv('PROCESSES')) if os.getenv('PROCESSES') else 2
 
 log_files = glob.glob('logs/*.{}'.format('csv'))
 
@@ -35,34 +29,16 @@ from_date = None
 # strategy.setting.take_profit = 0.02
 # strategy.setting.max_trailing_takes = 3
 
-strategy.setting.use_trailing_entry = False
-strategy.setting.trailing_amplitude_diff = 10
-
-hyperopt_params = {
-    "indicator": [
-        "ema5", "ema9", "ema10", "ema15", "ema20", "ema25", "ema30",
-        "ema35", "ema40", "ema45", "ema50", "ema55", "ema60", "ema65",
-        "ema70", "ema75", "ema80", "ema85", "ema90", "wma14"
-    ],
-    "amplitude": {
-        "min": 1,
-        "max": 5,
-        "step": 0.1
-    },
-    "best_result": 500,
-    "best_params": {
-        "indicator": None,
-        "amplitude": None,
-    }
-}
+# strategy.setting.use_trailing_entry = False
+# strategy.setting.trailing_amplitude_diff = 10
 
 
-def run_back_test(csv_list, symbol):
+def run_back_test(csv_list, symbol, instance):
     header = []
 
     print(
         datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), symbol,
-        strategy.setting.ema_amplitude, strategy.setting.indicator, len(csv_list)
+        instance.setting.ema_amplitude, instance.setting.indicator, len(csv_list)
     )
 
     for i, row in enumerate(csv_list):
@@ -77,7 +53,7 @@ def run_back_test(csv_list, symbol):
             if float(df_data.close_time) < from_date:
                 continue
 
-        strategy.process_kline_event(symbol, df_data, float(df_data['current_price']))
+        instance.process_kline_event(symbol, df_data, float(df_data['current_price']))
 
 
 if from_date:
@@ -102,6 +78,33 @@ def process_file(file):
             csv_reader = csv.reader(csv_file, delimiter=',')
             csv_enumerate = list(csv_reader)
 
+            balance = float(os.getenv('BALANCE')) if os.getenv('BALANCE') else 500.
+
+            account = Account(balance)
+            setting = Setting()
+            setting.is_back_test = True
+            setting.is_hyperopt = True
+
+            strategy = Strategy(account, setting)
+
+            hyperopt_params = {
+                "indicator": [
+                    "ema5", "ema9", "ema10", "ema15", "ema20", "ema25", "ema30",
+                    "ema35", "ema40", "ema45", "ema50", "ema55", "ema60", "ema65",
+                    "ema70", "ema75", "ema80", "ema85", "ema90", "wma14"
+                ],
+                "amplitude": {
+                    "min": 1,
+                    "max": 5,
+                    "step": 0.1
+                },
+                "best_result": 500,
+                "best_params": {
+                    "indicator": None,
+                    "amplitude": None,
+                }
+            }
+
             for indicator in hyperopt_params["indicator"]:
                 strategy.setting.indicator = indicator
 
@@ -121,7 +124,7 @@ def process_file(file):
                         }
                     )
 
-                    run_back_test(csv_enumerate, symbol)
+                    run_back_test(csv_enumerate, symbol, strategy)
 
                     if strategy.account.balance > hyperopt_params["best_result"]:
                         hyperopt_params["best_result"] = strategy.account.balance
@@ -155,10 +158,13 @@ def process_file(file):
         hyperopt_params["best_params"]["amplitude"] = None
 
 
-threads = []
-for f in log_files:
-    threads.append(Thread(target=process_file, args=(f,)))
-    threads[-1].start()
+with ThreadPool(processes=processes) as pool:
+    pool.map(process_file, log_files)
 
-for thread in threads:
-    thread.join()
+# threads = []
+# for f in log_files:
+#     threads.append(Thread(target=process_file, args=(f,)))
+#     threads[-1].start()
+#
+# for thread in threads:
+#     thread.join()
