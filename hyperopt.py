@@ -4,7 +4,7 @@ import glob
 import os
 import time
 from multiprocessing.pool import ThreadPool
-from threading import Thread
+import gc
 
 import pandas as pd
 import numpy as np
@@ -156,6 +156,8 @@ def process_file(file):
         hyperopt_params["best_result"] = 500
         hyperopt_params["best_params"]["indicator"] = None
         hyperopt_params["best_params"]["amplitude"] = None
+
+        gc.collect()
 
 
 with ThreadPool(processes=processes) as pool:
