@@ -57,9 +57,15 @@ hyperopt_params = {
 }
 
 
-def run_back_test(reader):
+def run_back_test(csv_list):
     header = []
-    for i, row in enumerate(reader):
+
+    print(
+        datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), symbol,
+        strategy.setting.ema_amplitude, strategy.setting.indicator, len(csv_list)
+    )
+
+    for i, row in enumerate(csv_list):
         if i == 0:
             header = row
             continue
@@ -79,6 +85,7 @@ if from_date:
         datetime.datetime.strptime(from_date, "%d-%m-%Y %H:%M:%S").timetuple()
     ) * 1000
 
+
 for file in log_files:
     symbol = file[5:-4]
 
@@ -93,13 +100,14 @@ for file in log_files:
 
         with open(os.getcwd() + "/" + file, 'r') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
+            csv_enumerate = list(csv_reader)
 
             for indicator in hyperopt_params["indicator"]:
                 strategy.setting.indicator = indicator
 
                 for amplitude in np.arange(
                         hyperopt_params["amplitude"]["min"],
-                        hyperopt_params["amplitude"]["max"],
+                        hyperopt_params["amplitude"]["max"] + 1,
                         hyperopt_params["amplitude"]["step"]):
                     strategy.account.balance = 500
                     strategy.setting.ema_amplitude = round(amplitude, 2)
@@ -113,7 +121,7 @@ for file in log_files:
                         }
                     )
 
-                    run_back_test(csv_reader)
+                    run_back_test(csv_enumerate)
 
                     if strategy.account.balance > hyperopt_params["best_result"]:
                         hyperopt_params["best_result"] = strategy.account.balance
