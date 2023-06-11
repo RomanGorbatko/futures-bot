@@ -67,7 +67,7 @@ class Setting:
         'KAVAUSDT', 'AGIXUSDT', 'SPELLUSDT',
         'IDEXUSDT', 'AMBUSDT', 'LINAUSDT',
         'KEYUSDT', 'HBARUSDT', 'RNDRUSDT',
-        'DUSKUSDT', '1000PEPE', 'INJUSDT',
+        'DUSKUSDT', '1000PEPEUSDT', 'INJUSDT',
         'STORJUSDT', 'SUIUSDT', 'MTLUSDT',
         'TLMUSDT', 'ALPHAUSDT', 'RENUSDT',
     ]
