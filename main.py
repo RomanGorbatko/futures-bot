@@ -94,6 +94,9 @@ def fix_dataframe_index(s):
 
 
 def handle_socket_message(event):
+    if "ps" not in event:
+        return
+
     s = event["ps"]
 
     event_df = pd.DataFrame([event["k"]])
