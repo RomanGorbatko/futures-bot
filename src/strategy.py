@@ -69,7 +69,7 @@ class Strategy:
     def update_leverage(self):
         info = self.client.futures_leverage_bracket()
 
-        for s in self.setting.symbols:
+        for s in self.setting.get_symbols_with_shitcoins():
             *_, leverage_info = filter(lambda d: d['symbol'] == s, info)
             leverage_info['brackets'].sort(key=lambda x: x['initialLeverage'], reverse=True)
 
@@ -89,7 +89,7 @@ class Strategy:
     def setup_symbols_settings(self):
         futures_info = self.client.futures_exchange_info()
 
-        for s in self.setting.symbols:
+        for s in self.setting.get_symbols_with_shitcoins():
             *_, symbol_info = filter(lambda d: d['symbol'] == s, futures_info['symbols'])
 
             self.setting.set_symbol_setting(s, "info", symbol_info)

@@ -156,7 +156,7 @@ def update_dataframe(skip_timer=False):
     )
     current_minute = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    for s in setting.symbols:
+    for s in setting.get_symbols_with_shitcoins():
         try:
             fresh_df = get_dataframe(s, interval, previous_minute, current_minute)
 
@@ -192,7 +192,7 @@ strategy.utils.print_log(
     }
 )
 
-for symbol in setting.symbols:
+for symbol in setting.get_symbols_with_shitcoins():
     df[symbol] = get_dataframe(symbol, interval, start_time, end_time)
     fix_dataframe_index(symbol)
 
@@ -208,6 +208,6 @@ while True:
 twm = ThreadedWebsocketManager()
 twm.start()
 
-for symbol in setting.symbols:
+for symbol in setting.get_symbols_with_shitcoins():
     twm.start_kline_futures_socket(callback=handle_socket_message, symbol=symbol)
 twm.join()

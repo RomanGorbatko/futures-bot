@@ -56,20 +56,27 @@ class Setting:
         'BNBUSDT', 'INJUSDT', 'FILUSDT',
         'SOLUSDT', 'FLMUSDT', 'FTMUSDT',
         'ETCUSDT', 'TRXUSDT', 'LTCUSDT',
-        'MANAUSDT', 'XRPUSDT',  # 'LDOUSDT',
-        'ADAUSDT', 'DOGEUSDT',  # 'ATOMUSDT',
-
+        'MANAUSDT', 'XRPUSDT', 'LDOUSDT',
+        'ADAUSDT', 'DOGEUSDT', 'ATOMUSDT',
         'AAVEUSDT', 'NEARUSDT', 'AXSUSDT',
     ]
 
     shit_coins = [
         'GRTUSDT', 'WAVESUSDT', '1000SHIBUSDT',
         'TOMOUSDT', 'RLCUSDT', 'JASMYUSDT',
-        'KAVAUSDT', 'AGIXUSDT', 'SPELLUSDT'
+        'KAVAUSDT', 'AGIXUSDT', 'SPELLUSDT',
+        'IDEXUSDT', 'AMBUSDT', 'LINAUSDT',
+        'KEYUSDT', 'HBARUSDT', 'RNDRUSDT',
+        'DUSKUSDT', '1000PEPE', 'INJUSDT',
+        'STORJUSDT', 'SUIUSDT', 'MTLUSDT',
+        'TLMUSDT', 'ALPHAUSDT', 'RENUSDT',
     ]
 
     def __init__(self):
         pass
+
+    def get_symbols_with_shitcoins(self) -> list:
+        return self.symbols + self.shit_coins
 
     @staticmethod
     def create_mysql_connection():
