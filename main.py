@@ -129,6 +129,11 @@ def handle_socket_message(event):
     event_data = event_df.iloc[0]
 
     try:
+        max_len = 100
+
+        if len(df[s]) > max_len:
+            df[s].drop(index=df[s].index[:len(df[s]) - max_len], axis=0, inplace=True)
+
         strategy.process_kline_event(s, df_data, float(event_data.close))
     except Exception as e:
         strategy.utils.print_log(
